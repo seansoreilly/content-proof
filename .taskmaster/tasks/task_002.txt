@@ -41,7 +41,7 @@ Test sign-in flow, verify session creation, check CSRF protection, unit test acc
 ### Details:
 1. Configure session strategy in NextAuth options. 2. Implement getServerSideProps or getInitialProps for server-side session checks. 3. Add CSRF token to forms and API routes. 4. Verify CSRF token on the server-side.
 
-## 5. Implement basic account evaluation logic [in-progress]
+## 5. Implement basic account evaluation logic [done]
 ### Dependencies: 2.4
 ### Description: Add logic to evaluate user accounts after successful authentication.
 ### Details:

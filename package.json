@@ -14,7 +14,8 @@
     "next": "15.3.3",
     "next-auth": "^4.24.11",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "qrcode": "^1.5.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
