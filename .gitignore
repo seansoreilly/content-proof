@@ -1,0 +1,53 @@
+# Node dependencies and package managers
+node_modules/
+*.tgz
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+.esbuild/
+
+# Vercel deployment artifacts
+.vercel/
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Testing & coverage
+coverage/
+.nyc_output/
+
+# Environment variables (keep examples)
+.env
+.env.*
+!.env.example
+!.env.local
+
+# Taskmaster generated files
+.taskmaster/
+
+# Cursor AI artifacts
+.cursor/
+
+# IDE & editor settings
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Misc project-specific
+.roo/
+.roomodes 

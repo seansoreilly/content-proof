@@ -443,40 +443,26 @@ const GMAIL_REGEX = /^[^@]+@gmail\.com$/i;
 
 ## Database Schema
 
-### Vercel Postgres Tables
+### Upstash Redis Key Design (MVP)
 
-#### signatures (Simplified - Optional Enhanced Features)
+ContentProof stores only lightweight metadata needed for optional enhanced features; the core verification flow remains fully offline.
 
-```sql
-CREATE TABLE signatures (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  file_hash VARCHAR(64) NOT NULL,
-  gmail_address VARCHAR(255) NOT NULL,
-  signature_data JSONB NOT NULL, -- Full QR data for enhanced features
-  created_at TIMESTAMP DEFAULT NOW(),
-  verification_count INTEGER DEFAULT 0,
-  trust_level JSONB, -- Enhanced trust scoring
-  INDEX idx_file_hash (file_hash),
-  INDEX idx_gmail_address (gmail_address),
-  INDEX idx_created_at (created_at)
-);
-```
+- `sig:{id}` → **Hash**
 
-#### public_keys (Key Management)
+  - `data` : JSON string – full signature record (same payload embedded in the QR)
+  - `ts` : ISO timestamp when the signature was created
+  - `count` : integer – number of successful verifications (optional)
 
-```sql
-CREATE TABLE public_keys (
-  key_id VARCHAR(50) PRIMARY KEY,
-  algorithm VARCHAR(20) NOT NULL DEFAULT 'Ed25519',
-  public_key TEXT NOT NULL,
-  private_key_ref VARCHAR(100), -- Environment variable reference
-  created_at TIMESTAMP DEFAULT NOW(),
-  valid_until TIMESTAMP,
-  is_current BOOLEAN DEFAULT false
-);
-```
+- `pk:current` → **String** – key ID of the currently active Ed25519 public key (e.g., `contentproof-2024-v1`)
 
-Note: Primary verification works without database - these tables support enhanced features and analytics only.
+- `pk:{keyId}` → **Hash**
+  - `public` : Base64 public key
+  - `algo` : "Ed25519"
+  - `created`: ISO timestamp
+
+TTL policies can be applied to `sig:{id}` hashes (e.g., 1-year expiry) to keep the data set compact. Upstash's REST API allows simple GET/SET calls directly from Edge Functions.
+
+Note: The Redis store is **not** required for basic verification; it only powers future analytics, revocation, or trust-score lookups.
 
 ## Google analytics Requirements
 
