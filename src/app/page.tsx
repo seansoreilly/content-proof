@@ -3,6 +3,7 @@ import styles from "./page.module.css";
 import IconTest from "../components/IconTest";
 import { SignInButton } from "../components/SignInButton";
 import { SignOutButton } from "../components/SignOutButton";
+import { AccountStatus } from "../components/AccountStatus";
 import { getServerSession } from "next-auth";
 import { authOptions } from "./api/auth/[...nextauth]/route";
 
@@ -100,6 +101,10 @@ export default async function Home() {
         {session ? (
           <>
             <p>Signed in as {session.user?.email}</p>
+            {/* Display account status */}
+            {/* @ts-expect-error Server Component file using client sub-component */}
+            { /* eslint-disable-next-line react/jsx-pascal-case */ }
+            <AccountStatus />
             <SignOutButton />
           </>
         ) : (
