@@ -67,6 +67,13 @@ export const QrCodeGenerator: React.FC<Props> = ({ signature, size = 256 }) => {
         height={size}
         className="border rounded"
       />
+      {/* Debug: Display the actual URL */}
+      <div className="mt-2 p-2 bg-gray-100 rounded text-xs break-all max-w-md">
+        <p className="font-semibold mb-1">Debug - QR Code URL:</p>
+        <code className="text-blue-600">
+          {createVerificationUrl(toBase64Url(signature))}
+        </code>
+      </div>
       <a
         href={dataUrl}
         download="signature_qrcode.png"

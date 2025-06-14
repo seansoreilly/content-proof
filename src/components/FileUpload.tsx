@@ -3,6 +3,7 @@
 import React, { useRef, useState } from "react";
 import Image from "next/image";
 import { QrCodeGenerator } from "@/components/QrCodeGenerator";
+import { sha256Hash } from "@/lib/hash";
 
 interface HashResult {
   fileName: string;
@@ -17,21 +18,8 @@ const ALLOWED_MIME_TYPES = [
   "image/gif",
   "application/pdf",
   "text/plain",
+  "application/x-zip-compressed",
 ];
-
-function arrayBufferToHex(buffer: ArrayBuffer) {
-  return Array.prototype.map
-    .call(new Uint8Array(buffer), (x: number) =>
-      x.toString(16).padStart(2, "0")
-    )
-    .join("");
-}
-
-async function sha256Hash(file: File): Promise<string> {
-  const fileBuffer = await file.arrayBuffer();
-  const hashBuffer = await crypto.subtle.digest("SHA-256", fileBuffer);
-  return arrayBufferToHex(hashBuffer);
-}
 
 export default function FileUpload() {
   const [dragActive, setDragActive] = useState(false);
