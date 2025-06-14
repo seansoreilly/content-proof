@@ -1,8 +1,13 @@
 import Image from "next/image";
 import styles from "./page.module.css";
 import IconTest from "../components/IconTest";
+import { SignInButton } from "../components/SignInButton";
+import { SignOutButton } from "../components/SignOutButton";
+import { getServerSession } from "next-auth";
+import { authOptions } from "./api/auth/[...nextauth]/route";
 
-export default function Home() {
+export default async function Home() {
+  const session = await getServerSession(authOptions);
   return (
     <div className={styles.page}>
       <main className={styles.main}>
@@ -92,7 +97,14 @@ export default function Home() {
         </a>
       </footer>
       <section className={styles.ctas} style={{ marginTop: 20 }}>
-        <IconTest />
+        {session ? (
+          <>
+            <p>Signed in as {session.user?.email}</p>
+            <SignOutButton />
+          </>
+        ) : (
+          <SignInButton />
+        )}
       </section>
     </div>
   );

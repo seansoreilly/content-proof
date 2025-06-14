@@ -1,0 +1,49 @@
+# Task ID: 2
+# Title: Implement Google OAuth Authentication
+# Status: pending
+# Dependencies: 1
+# Priority: high
+# Description: Set up NextAuth.js for Google OAuth authentication and implement the sign-in flow.
+# Details:
+1. Install NextAuth.js
+2. Configure Google OAuth credentials
+3. Implement NextAuth API route
+4. Create sign-in and sign-out components
+5. Implement session management
+6. Add CSRF protection
+7. Implement basic account evaluation logic
+
+# Test Strategy:
+Test sign-in flow, verify session creation, check CSRF protection, unit test account evaluation logic
+
+# Subtasks:
+## 1. Set up NextAuth.js and Google OAuth credentials [done]
+### Dependencies: None
+### Description: Install NextAuth.js and configure Google OAuth credentials in the Google Developer Console.
+### Details:
+1. Install NextAuth.js using npm or yarn. 2. Create a new project in Google Developer Console. 3. Set up OAuth consent screen. 4. Create OAuth 2.0 Client ID. 5. Note down Client ID and Client Secret.
+
+## 2. Implement NextAuth API route and configuration [done]
+### Dependencies: 2.1
+### Description: Set up the NextAuth API route and configure NextAuth with Google provider.
+### Details:
+1. Create [...nextauth].js file in pages/api/auth. 2. Import and configure NextAuth with Google provider. 3. Set up environment variables for Google Client ID and Secret. 4. Configure callback URL and other NextAuth options.
+
+## 3. Create sign-in and sign-out components [done]
+### Dependencies: 2.2
+### Description: Implement React components for sign-in and sign-out functionality using NextAuth.js hooks.
+### Details:
+1. Create SignIn component using useSession and signIn from next-auth/react. 2. Create SignOut component using signOut from next-auth/react. 3. Implement conditional rendering based on session state.
+
+## 4. Implement session management and CSRF protection [done]
+### Dependencies: 2.2, 2.3
+### Description: Set up session handling and add CSRF protection to the authentication flow.
+### Details:
+1. Configure session strategy in NextAuth options. 2. Implement getServerSideProps or getInitialProps for server-side session checks. 3. Add CSRF token to forms and API routes. 4. Verify CSRF token on the server-side.
+
+## 5. Implement basic account evaluation logic [pending]
+### Dependencies: 2.4
+### Description: Add logic to evaluate user accounts after successful authentication.
+### Details:
+1. Create a function to check user's email domain or other criteria. 2. Implement logic in NextAuth callbacks (e.g., signIn callback) to evaluate the account. 3. Store evaluation results in the user's session or database. 4. Update UI components to reflect account status.
+

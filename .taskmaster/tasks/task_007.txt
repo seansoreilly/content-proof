@@ -1,0 +1,47 @@
+# Task ID: 7
+# Title: Develop Public Key Distribution System
+# Status: pending
+# Dependencies: 4
+# Priority: medium
+# Description: Implement the well-known endpoint for public key distribution and the key rotation mechanism.
+# Details:
+1. Create /.well-known/public-keys.json endpoint
+2. Implement public key storage and retrieval in Vercel environment
+3. Develop key rotation logic
+4. Implement backward compatibility for older keys
+5. Create API for fetching current and historical public keys
+
+# Test Strategy:
+Test public key endpoint, verify key rotation process, check backward compatibility, ensure proper error handling for key fetching
+
+# Subtasks:
+## 1. Create /.well-known/public-keys.json endpoint [pending]
+### Dependencies: None
+### Description: Implement a new API endpoint that serves the public keys in JSON format at the /.well-known/public-keys.json path.
+### Details:
+Use the API routing system to create a new endpoint. The response should be a JSON object containing the current public key and any historical keys. Ensure proper CORS headers are set for public access.
+
+## 2. Implement public key storage in Vercel environment [pending]
+### Dependencies: None
+### Description: Set up a secure storage mechanism for public keys within the Vercel environment, allowing for easy retrieval and updates.
+### Details:
+Use Vercel's environment variables or a secure key-value store to save the public keys. Implement functions to read and write keys to this storage. Ensure that the storage method is scalable and supports multiple keys.
+
+## 3. Develop key rotation logic [pending]
+### Dependencies: 7.2
+### Description: Implement a mechanism to rotate public keys periodically or on-demand, ensuring smooth transitions between keys.
+### Details:
+Create a function that generates a new key pair, stores the new public key, and updates the current key pointer. Implement logic to determine when a key rotation should occur (e.g., based on time or manual trigger). Ensure that old keys are retained for a specified period.
+
+## 4. Implement backward compatibility for older keys [pending]
+### Dependencies: 7.3
+### Description: Ensure that the system can validate signatures created with older public keys for a specified period after rotation.
+### Details:
+Modify the signature validation logic to check against both the current key and recent historical keys. Implement a mechanism to expire and remove very old keys. Update the public key retrieval function to return both current and valid historical keys.
+
+## 5. Create API for fetching current and historical public keys [pending]
+### Dependencies: 7.2, 7.3, 7.4
+### Description: Develop an internal API that allows other parts of the system to fetch the current public key and valid historical keys.
+### Details:
+Implement a function that returns an object containing the current public key and an array of valid historical keys. This function should interface with the storage mechanism and apply any necessary filtering or formatting. Ensure that this API is easily accessible to other parts of the codebase.
+

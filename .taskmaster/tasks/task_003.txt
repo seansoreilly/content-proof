@@ -1,0 +1,47 @@
+# Task ID: 3
+# Title: Develop File Upload and Hash Generation
+# Status: pending
+# Dependencies: 1
+# Priority: high
+# Description: Create a file upload component and implement SHA-256 hash generation for uploaded files.
+# Details:
+1. Create drag & drop file upload component
+2. Implement file validation (type, size)
+3. Use Web Crypto API for SHA-256 hash generation
+4. Display file preview and hash result
+5. Implement error handling for upload failures
+
+# Test Strategy:
+Test file upload with various file types and sizes, verify hash generation accuracy, check error handling for invalid files
+
+# Subtasks:
+## 1. Create drag & drop file upload component [pending]
+### Dependencies: None
+### Description: Implement a user-friendly drag and drop interface for file uploads using HTML5 and JavaScript
+### Details:
+Use the HTML5 Drag and Drop API. Create a designated drop zone, handle dragover and drop events, and prevent default browser behavior. Implement visual feedback for drag actions.
+
+## 2. Implement file validation [pending]
+### Dependencies: 3.1
+### Description: Add client-side validation for uploaded files, checking file type and size
+### Details:
+Create a function to check file MIME type against an allowed list. Implement size validation using File API. Provide user feedback for invalid files.
+
+## 3. Generate SHA-256 hash using Web Crypto API [pending]
+### Dependencies: 3.2
+### Description: Implement SHA-256 hash generation for uploaded files using the Web Crypto API
+### Details:
+Use FileReader to read file contents as an ArrayBuffer. Utilize crypto.subtle.digest() to generate the SHA-256 hash. Convert the resulting ArrayBuffer to a hexadecimal string.
+
+## 4. Display file preview and hash result [pending]
+### Dependencies: 3.3
+### Description: Create a UI component to show a preview of the uploaded file (if applicable) and display the generated hash
+### Details:
+For image files, use URL.createObjectURL() to generate a preview. For other file types, display file name and size. Show a loading indicator during hash generation. Present the hash result in a clear, copyable format.
+
+## 5. Implement error handling for upload failures [pending]
+### Dependencies: 3.4
+### Description: Add comprehensive error handling for various failure scenarios during file upload and processing
+### Details:
+Handle network errors, file reading errors, and hash generation failures. Implement try-catch blocks around critical operations. Provide clear, user-friendly error messages. Log detailed error information for debugging.
+
