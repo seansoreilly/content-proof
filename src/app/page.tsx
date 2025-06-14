@@ -1,5 +1,6 @@
 import Image from "next/image";
 import styles from "./page.module.css";
+import IconTest from "../components/IconTest";
 
 export default function Home() {
   return (
@@ -90,6 +91,9 @@ export default function Home() {
           Go to nextjs.org →
         </a>
       </footer>
+      <section className={styles.ctas} style={{ marginTop: 20 }}>
+        <IconTest />
+      </section>
     </div>
   );
 }
