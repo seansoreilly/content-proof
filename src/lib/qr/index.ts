@@ -1,4 +1,4 @@
-export type EncodingInput = Record<string, unknown> | string;
+export type EncodingInput = object | string;
 
 /**
  * Encode an object (or string) as Base64URL.
