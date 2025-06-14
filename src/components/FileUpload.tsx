@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useRef, useState } from "react";
+import Image from "next/image";
+import { QrCodeGenerator } from "@/components/QrCodeGenerator";
 
 interface HashResult {
   fileName: string;
@@ -37,6 +39,9 @@ export default function FileUpload() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [signature, setSignature] = useState<
+    import("@/lib/crypto/ed25519").SignatureData | null
+  >(null);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -44,6 +49,7 @@ export default function FileUpload() {
     setHashResult(null);
     setError(null);
     setPreviewUrl(null);
+    setSignature(null);
   };
 
   const validateFile = (file: File) => {
@@ -77,9 +83,22 @@ export default function FileUpload() {
     try {
       const hash = await sha256Hash(file);
       setHashResult({ fileName: file.name, fileSize: file.size, hash });
+
+      // Call the sign API to generate signature data
+      const res = await fetch("/api/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileHash: hash }),
+      });
+      if (!res.ok) {
+        throw new Error(`Signature API error: ${res.status}`);
+      }
+      const data =
+        (await res.json()) as import("@/lib/crypto/ed25519").SignatureData;
+      setSignature(data);
     } catch (err) {
-      setError("Failed to generate hash. Please try again.");
       console.error(err);
+      setError("Failed to generate signature.");
     } finally {
       setLoading(false);
     }
@@ -150,9 +169,11 @@ export default function FileUpload() {
       {previewUrl && (
         <div className="mt-4">
           <p className="font-medium mb-2">Preview:</p>
-          <img
+          <Image
             src={previewUrl}
             alt="File preview"
+            width={256}
+            height={256}
             className="max-h-64 object-contain border rounded"
           />
         </div>
@@ -179,6 +200,15 @@ export default function FileUpload() {
           >
             Copy Hash
           </button>
+        </div>
+      )}
+
+      {signature && (
+        <div className="mt-6">
+          <p className="font-medium text-center">
+            QR Code with embedded verification link:
+          </p>
+          <QrCodeGenerator signature={signature} />
         </div>
       )}
     </div>
