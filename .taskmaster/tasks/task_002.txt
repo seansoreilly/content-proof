@@ -41,9 +41,49 @@ Test sign-in flow, verify session creation, check CSRF protection, unit test acc
 ### Details:
 1. Configure session strategy in NextAuth options. 2. Implement getServerSideProps or getInitialProps for server-side session checks. 3. Add CSRF token to forms and API routes. 4. Verify CSRF token on the server-side.
 
-## 5. Implement basic account evaluation logic [pending]
+## 5. Implement basic account evaluation logic [in-progress]
 ### Dependencies: 2.4
 ### Description: Add logic to evaluate user accounts after successful authentication.
 ### Details:
 1. Create a function to check user's email domain or other criteria. 2. Implement logic in NextAuth callbacks (e.g., signIn callback) to evaluate the account. 3. Store evaluation results in the user's session or database. 4. Update UI components to reflect account status.
+<info added on 2025-06-14T13:22:52.794Z>
+Implementation Plan (2025-06-14):
+
+Goal: Evaluate user account during Google OAuth sign-in to allow only users from allowed email domains; store evaluation result in JWT/session for UI use.
+
+Steps:
+1. Create util function `isAllowedEmail(email: string): boolean` in `src/lib/auth/validation.ts`.
+   - Accepts email string; returns true if domain in ALLOWED_EMAIL_DOMAINS env var (comma-separated).
+   - Fallback: allow all if env var undefined.
+
+2. Extend NextAuth configuration in `src/app/api/auth/[...nextauth]/route.ts`:
+   a. Import `isAllowedEmail`.
+   b. Add `callbacks` object with:
+      • `async signIn({ user }):` -> if !isAllowedEmail(user.email) return false
+      • `async jwt({ token, user }):` -> if user?.email, add `allowed: isAllowedEmail(user.email)`
+      • `async session({ session, token }):` -> add `session.user.allowed = token.allowed`
+
+3. Update TypeScript types:
+   - Create `types/next-auth.d.ts` to augment `User`, `Session`, and `JWT` with `allowed: boolean`.
+
+4. Modify existing SignIn/SignOut component (`src/components/AuthButton.tsx` if exists) or create new `AccountStatus.tsx` to display notice if account not allowed.
+   - Use `useSession` to read `session.user.allowed`.
+   - If `false`, show message "Your account is awaiting approval".
+
+5. Environment Variable:
+   - Document in README `.env` key `ALLOWED_EMAIL_DOMAINS="example.com,company.com"`.
+   - Fallback to allow any domain when unset (dev convenience).
+
+6. Tests:
+   - Add unit tests for `isAllowedEmail` in `__tests__/validation.test.ts` covering allowed, disallowed, env unset.
+   - Use Jest + `next-auth/jwt` mock for callbacks verifying token.allowed flag.
+
+Potential Issues:
+- Next.js app directory route typing; ensure build passes.
+- Need to mark new types file as non-module with `export {}`.
+
+Next Actions:
+- Set subtask status to in-progress.
+- Implement code changes across new util, route, types, and UI.
+</info added on 2025-06-14T13:22:52.794Z>
 
