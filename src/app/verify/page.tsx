@@ -56,6 +56,7 @@ function VerifyPageContent() {
     "idle" | "verifying" | "success" | "failure" | "error"
   >("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [verificationTime, setVerificationTime] = useState<Date | null>(null);
 
   // Decode data on first render
   useEffect(() => {
@@ -136,6 +137,7 @@ function VerifyPageContent() {
           ? "Signature verified successfully."
           : "Signature verification failed."
       );
+      setVerificationTime(new Date());
     } catch (err) {
       console.error(err);
       setStatus("error");
@@ -144,26 +146,68 @@ function VerifyPageContent() {
   }, [sigData, file, email]);
 
   return (
-    <main className="relative flex flex-col items-center gap-4 min-h-screen overflow-hidden p-4">
-      {/* Animated Background */}
+    <main className="relative flex flex-col items-center justify-center min-h-screen overflow-hidden p-4">
+      {/* Enhanced Animated Background */}
       <div className="absolute inset-0 -z-10 pointer-events-none">
         <div className="animate-float w-72 h-72 bg-accent-blue/20 blur-3xl rounded-full absolute -top-24 -left-24" />
         <div className="animate-float w-64 h-64 bg-accent-purple/20 blur-3xl rounded-full absolute bottom-0 right-0" />
+        <div className="animate-float w-48 h-48 bg-accent-teal/15 blur-3xl rounded-full absolute top-1/2 right-1/3" />
       </div>
-      <Link
-        href="/"
-        aria-label="Back"
-        className="btn-secondary absolute top-6 left-6 backdrop-blur-xs"
-      >
-        ← Home
-      </Link>
+
+      {/* Back Navigation */}
+      <div className="absolute top-6 left-6">
+        <Link
+          href="/"
+          aria-label="Back to home"
+          className="btn-secondary backdrop-blur-xs"
+        >
+          ← Home
+        </Link>
+      </div>
+
+      {/* Centered Verification Icon with Glow Effect */}
+      <div className="mb-6">
+        <div className="relative">
+          <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-accent-blue to-accent-purple glow-blue">
+            <svg
+              className="w-8 h-8 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </div>
+        </div>
+      </div>
+
       <h1 className="text-gradient-blue text-3xl md:text-5xl font-extrabold mb-8 bg-[length:200%_200%] bg-clip-text text-transparent animate-gradient-x text-center">
         Signature Verification
       </h1>
 
       {status === "error" && message && (
-        <div className="glass-dark p-4 border border-red-400/30 max-w-md">
-          <p className="text-red-400 font-medium text-center">{message}</p>
+        <div className="glass p-4 border border-red-400/30 bg-red-400/20 backdrop-blur-sm max-w-md mb-6 animate-in fade-in duration-500">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-red-400 flex items-center justify-center">
+              <svg
+                className="w-3 h-3 text-white"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+            <p className="text-red-400 font-medium text-center">{message}</p>
+          </div>
         </div>
       )}
 
@@ -180,7 +224,7 @@ function VerifyPageContent() {
               id="fileInput"
               type="file"
               onChange={onFileChange}
-              className="glass w-full px-3 py-2 text-light-600 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-accent-blue file:text-white hover:file:bg-accent-purple"
+              className="glass w-full px-3 py-2 text-light-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-medium file:bg-gradient-to-r file:from-accent-blue file:to-accent-purple file:text-white hover:file:from-accent-purple hover:file:to-accent-teal transition-all duration-300"
             />
           </div>
 
@@ -204,7 +248,7 @@ function VerifyPageContent() {
               <input
                 id="emailInput"
                 type="email"
-                className="glass w-full px-3 py-2 text-light-600"
+                className="glass w-full px-3 py-2 text-light-600 focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue/50 transition-all duration-300"
                 placeholder="Enter Gmail address used during signing"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -213,33 +257,70 @@ function VerifyPageContent() {
           </div>
 
           <button
-            className="btn-primary w-full disabled:opacity-50 flex items-center justify-center gap-2"
+            className="btn-primary w-full disabled:opacity-50 flex items-center justify-center gap-2 relative overflow-hidden"
             disabled={status === "verifying"}
             onClick={verify}
           >
-            {status === "verifying" && <div className="spinner"></div>}
+            {status === "verifying" && (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+            )}
             {status === "verifying" ? "Verifying…" : "Verify Signature"}
           </button>
 
           {status === "success" && message && (
-            <div className="glass p-4 border border-green-400/30 bg-green-400/10">
+            <div className="glass p-4 border border-green-400/30 bg-green-400/10 animate-in fade-in duration-500">
               <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full bg-green-400 flex items-center justify-center">
-                  <span className="text-white text-xs">✓</span>
+                <div className="w-6 h-6 rounded-full bg-green-400 flex items-center justify-center glow-green">
+                  <svg
+                    className="w-3 h-3 text-white"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
                 </div>
                 <p className="text-green-400 font-medium">{message}</p>
               </div>
-              <p className="text-light-500 text-sm mt-2">
-                Verified at {new Date().toLocaleString()}
-              </p>
+              {verificationTime && (
+                <p className="text-light-500 text-sm mt-2 flex items-center gap-1">
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  Verified at {verificationTime.toLocaleString()}
+                </p>
+              )}
             </div>
           )}
 
           {status === "failure" && message && (
-            <div className="glass-dark p-4 border border-red-400/30">
+            <div className="glass-dark p-4 border border-red-400/30 animate-in fade-in duration-500">
               <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full bg-red-400 flex items-center justify-center">
-                  <span className="text-white text-xs">✗</span>
+                <div className="w-6 h-6 rounded-full bg-red-400 flex items-center justify-center">
+                  <svg
+                    className="w-3 h-3 text-white"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
                 </div>
                 <p className="text-red-400 font-medium">{message}</p>
               </div>
@@ -250,9 +331,10 @@ function VerifyPageContent() {
 
       {/* Security Note */}
       <div className="mt-8 max-w-md text-center">
-        <p className="text-sm text-light-500">
-          🔒 All verification happens locally in your browser. No files or data
-          are transmitted to our servers.
+        <p className="text-sm text-light-500 flex items-center justify-center gap-2">
+          <span className="text-lg">🔒</span>
+          All verification happens locally in your browser. No files or data are
+          transmitted to our servers.
         </p>
       </div>
     </main>
@@ -264,7 +346,10 @@ export default function VerifyPage() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center min-h-screen">
-          Loading...
+          <div className="glass p-8 flex items-center gap-3">
+            <div className="w-6 h-6 border-2 border-accent-blue/30 border-t-accent-blue rounded-full animate-spin"></div>
+            <span className="text-light-600">Loading verification...</span>
+          </div>
         </div>
       }
     >
