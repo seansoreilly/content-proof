@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { sha256Hash } from "@/lib/hash";
 import { verifyEd25519Signature } from "@/lib/crypto/verify";
 import { trackVerifySignature } from "@/lib/analytics";
+import { useSession } from "next-auth/react";
 
 interface SignatureData {
   signature: string;
@@ -44,6 +45,8 @@ function decodeSignatureData(encoded: string): SignatureData | null {
 function VerifyPageContent() {
   const searchParams = useSearchParams();
   const encodedData = searchParams.get("data") ?? "";
+
+  const { data: session, status: authStatus } = useSession();
 
   const [sigData, setSigData] = useState<SignatureData | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -86,6 +89,12 @@ function VerifyPageContent() {
       } catch {}
     }
   }, [sigData]);
+
+  useEffect(() => {
+    if (authStatus === "authenticated" && session?.user?.email) {
+      setEmail(session.user.email);
+    }
+  }, [authStatus, session]);
 
   const onFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -147,13 +156,23 @@ function VerifyPageContent() {
         <>
           <input type="file" onChange={onFileChange} />
 
-          <input
-            type="email"
-            className="border rounded px-3 py-2"
-            placeholder="Gmail address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+          {authStatus === "authenticated" && session?.user?.email ? (
+            <input
+              type="email"
+              className="border rounded px-3 py-2 bg-gray-100 cursor-not-allowed"
+              value={session.user.email}
+              disabled
+              readOnly
+            />
+          ) : (
+            <input
+              type="email"
+              className="border rounded px-3 py-2"
+              placeholder="Gmail address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          )}
 
           <button
             className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
