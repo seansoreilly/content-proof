@@ -7,22 +7,22 @@ import { authOptions } from "@/lib/auth/options";
 
 export default async function Home() {
   const session = await getServerSession(authOptions);
-  return (
-    <>
-      <Landing />
-      <section className="flex justify-center mt-10">
-        {session ? (
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-sm text-gray-600">
-              Signed in as {session.user?.email}
-            </p>
-            <AccountStatus />
-            <SignOutButton />
-          </div>
-        ) : (
-          <SignInButton />
-        )}
-      </section>
-    </>
+
+  const authSection = (
+    <div className="flex justify-center">
+      {session ? (
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-sm text-light-500">
+            Signed in as {session.user?.email}
+          </p>
+          <AccountStatus />
+          <SignOutButton />
+        </div>
+      ) : (
+        <SignInButton />
+      )}
+    </div>
   );
+
+  return <Landing authSection={authSection} />;
 }

@@ -23,7 +23,11 @@ const features = [
   },
 ];
 
-export default function Landing() {
+interface LandingProps {
+  authSection?: React.ReactNode;
+}
+
+export default function Landing({ authSection }: LandingProps) {
   return (
     <main className="relative flex flex-col items-center w-full overflow-hidden">
       {/* Animated Background Orbs */}
@@ -52,6 +56,10 @@ export default function Landing() {
           Generate cryptographic signatures for your digital assets and verify
           authenticity in seconds.
         </p>
+
+        {/* Authentication Section */}
+        {authSection && <div className="mb-8">{authSection}</div>}
+
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link href="/upload" className="btn-primary">
             Sign a file
@@ -86,11 +94,10 @@ export default function Landing() {
         </p>
       </section>
 
-        {/* Footer with Build Info */}
-        <footer className="mt-16 pt-8 border-t border-gray-200">
-          <DevelopmentBuildInfo />
-        </footer>
-
+      {/* Footer with Build Info */}
+      <footer className="mt-16 pt-8 border-t border-gray-200">
+        <DevelopmentBuildInfo />
+      </footer>
     </main>
   );
 }
