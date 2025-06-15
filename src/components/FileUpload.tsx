@@ -137,6 +137,7 @@ export default function FileUpload() {
         onClick={onButtonClick}
       >
         <input
+          id="fileInput"
           type="file"
           ref={inputRef}
           className="hidden"
@@ -144,7 +145,16 @@ export default function FileUpload() {
         />
         <p className="text-gray-700 text-center">
           Drag &amp; drop a file here, or{" "}
-          <span className="font-semibold">browse</span>
+          <label
+            htmlFor="fileInput"
+            className="font-semibold text-blue-600 hover:underline cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              onButtonClick();
+            }}
+          >
+            browse
+          </label>
         </p>
       </div>
 
