@@ -1,5 +1,6 @@
 import * as nacl from "tweetnacl";
 import { fromBase64Url } from "@/lib/base64";
+import { getAllValidPublicKeys } from "@/lib/keys";
 
 /**
  * Extract the 32-byte raw Ed25519 public key from an SPKI DER (Base64) buffer.
@@ -35,4 +36,21 @@ export function verifyEd25519Signature(
   if (signature.length !== 64) return false;
   const publicKey = spkiBase64ToRawKey(publicKeyBase64);
   return nacl.sign.detached.verify(msg, signature, publicKey);
+}
+
+/**
+ * Attempt to verify a signature against **all** currently allowed public keys
+ * (current + historical). Returns the Base64 public key that was successfully
+ * matched, or `null` if verification failed for every key.
+ */
+export function verifySignatureAgainstKnownKeys(
+  message: string | Uint8Array,
+  signatureBase64Url: string
+): string | null {
+  for (const key of getAllValidPublicKeys()) {
+    if (verifyEd25519Signature(message, signatureBase64Url, key)) {
+      return key;
+    }
+  }
+  return null;
 } 
