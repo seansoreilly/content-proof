@@ -68,6 +68,12 @@ body::before {
   background: linear-gradient(90deg, #2563eb, #7c3aed);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  background-clip: text;
+  /* Ensure proper text rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Add padding to prevent clipping */
+  padding: 0.1em 0;
 }
 
 .text-gradient-teal {

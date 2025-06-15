@@ -213,7 +213,7 @@ export default function FileUpload() {
         </p>
 
         <p className="text-xs text-light-400 mt-2 text-center">
-          Supports PNG, JPEG, GIF, PDF, TXT, ZIP (max 10MB)
+          Supports files up to 10MB
         </p>
       </div>
 
