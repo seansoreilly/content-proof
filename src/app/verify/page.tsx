@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { sha256Hash } from "@/lib/hash";
 import { verifyEd25519Signature } from "@/lib/crypto/verify";
 import { trackVerifySignature } from "@/lib/analytics";
@@ -149,13 +150,13 @@ function VerifyPageContent() {
         <div className="animate-float w-72 h-72 bg-accent-blue/20 blur-3xl rounded-full absolute -top-24 -left-24" />
         <div className="animate-float w-64 h-64 bg-accent-purple/20 blur-3xl rounded-full absolute bottom-0 right-0" />
       </div>
-      <a
+      <Link
         href="/"
         aria-label="Back"
         className="btn-secondary absolute top-6 left-6 backdrop-blur-xs"
       >
         ← Home
-      </a>
+      </Link>
       <h1 className="text-gradient-blue text-3xl md:text-5xl font-extrabold mb-8 bg-[length:200%_200%] bg-clip-text text-transparent animate-gradient-x text-center">
         Signature Verification
       </h1>

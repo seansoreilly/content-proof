@@ -1,6 +1,7 @@
 "use client";
 
 import FileUpload from "../../components/FileUpload";
+import Link from "next/link";
 
 export default function UploadPage() {
   return (
@@ -13,13 +14,13 @@ export default function UploadPage() {
 
       {/* Back Navigation */}
       <div className="absolute top-6 left-6">
-        <a
+        <Link
           href="/"
           aria-label="Back to home"
           className="btn-secondary backdrop-blur-xs"
         >
           ← Home
-        </a>
+        </Link>
       </div>
 
       <h1 className="text-gradient-blue text-3xl md:text-5xl font-extrabold mb-8 bg-[length:200%_200%] bg-clip-text text-transparent animate-gradient-x text-center">
