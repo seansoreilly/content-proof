@@ -26,6 +26,7 @@ interface Props {
  */
 export const QrCodeGenerator: React.FC<Props> = ({ signature, size = 256 }) => {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,6 +36,7 @@ export const QrCodeGenerator: React.FC<Props> = ({ signature, size = 256 }) => {
         setDataUrl(null);
         const encoded = toBase64Url(signature);
         const link = createVerificationUrl(encoded);
+        setVerificationUrl(link);
         const url = await generateQrCodeDataUrl(link, {
           width: size,
           errorCorrectionLevel: "M",
@@ -67,13 +69,19 @@ export const QrCodeGenerator: React.FC<Props> = ({ signature, size = 256 }) => {
         height={size}
         className="border rounded"
       />
-      {/* Debug: Display the actual URL */}
-      <div className="mt-2 p-2 bg-gray-100 rounded text-xs break-all max-w-md">
-        <p className="font-semibold mb-1">Debug - QR Code URL:</p>
-        <code className="text-blue-600">
-          {createVerificationUrl(toBase64Url(signature))}
-        </code>
-      </div>
+      {verificationUrl && (
+        <div className="flex flex-col items-center gap-1 max-w-md break-all">
+          <code className="text-xs bg-gray-100 p-2 rounded">
+            {verificationUrl}
+          </code>
+          <button
+            onClick={() => navigator.clipboard.writeText(verificationUrl)}
+            className="text-blue-600 hover:underline text-sm"
+          >
+            Copy verification link
+          </button>
+        </div>
+      )}
       <a
         href={dataUrl}
         download="signature_qrcode.png"
