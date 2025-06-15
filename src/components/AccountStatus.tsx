@@ -10,7 +10,7 @@ export function AccountStatus() {
 
   if (allowed === false) {
     return (
-      <div className="glass-dark mt-4 p-4 border border-red-400/30">
+      <div className="glass mt-4 p-4 border border-red-400/30 bg-red-400/10">
         <p className="text-sm text-red-400 font-medium">
           Your account is not authorized to access this application. Please
           contact support.

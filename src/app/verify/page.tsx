@@ -218,7 +218,7 @@ function VerifyPageContent() {
               htmlFor="fileInput"
               className="block text-sm font-medium text-light-600"
             >
-              Select Original File
+              Select file to verify
             </label>
             <input
               id="fileInput"
@@ -307,7 +307,7 @@ function VerifyPageContent() {
           )}
 
           {status === "failure" && message && (
-            <div className="glass-dark p-4 border border-red-400/30 animate-in fade-in duration-500">
+            <div className="glass p-4 border border-red-400/30 bg-red-400/10 animate-in fade-in duration-500">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full bg-red-400 flex items-center justify-center">
                   <svg
