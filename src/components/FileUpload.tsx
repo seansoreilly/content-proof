@@ -70,27 +70,34 @@ export default function FileUpload() {
 
     setLoading(true);
     try {
+      console.log(`Starting file hash generation for: ${file.name} (${file.size} bytes)`);
       const hash = await sha256Hash(file);
+      console.log(`Generated hash: ${hash}`);
       setHashResult({ fileName: file.name, fileSize: file.size, hash });
 
-      // Call the sign API to generate signature data
+      console.log('Initiating signature request to /api/sign');
       const res = await fetch("/api/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileHash: hash }),
       });
+      
       if (!res.ok) {
+        console.error(`Signature API failed with status: ${res.status}`);
         throw new Error(`Signature API error: ${res.status}`);
       }
-      const data =
-        (await res.json()) as import("@/lib/crypto/ed25519").SignatureData;
+      
+      const data = (await res.json()) as import("@/lib/crypto/ed25519").SignatureData;
+      console.log('Successfully received signature data');
       setSignature(data);
-      // Analytics: custom event for file signing
+      
+      console.log('Tracking file signing event');
       trackSignFile();
-    } catch (err) {
-      console.error(err);
+    } catch (err) {                                           
+      console.error('File signing process failed:', err);
       setError("Failed to generate signature.");
     } finally {
+      console.log('File signing process completed');
       setLoading(false);
     }
   };
