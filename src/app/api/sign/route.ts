@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { generateSignature } from "@/lib/crypto/ed25519";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
+import { redis } from "@/lib/redis";
 
 export async function POST(request: Request) {
   try {
@@ -15,10 +16,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid fileHash" }, { status: 400 });
     }
 
+    const email = session.user.email!;
     const timestamp = Date.now();
-    const signature = generateSignature({ fileHash, gmail: session.user.email!, timestamp });
+    const signature = generateSignature({ fileHash, gmail: email, timestamp });
 
-    return NextResponse.json(signature, { status: 200 });
+    // Persist signature data for future lookup (trust, QR, etc.)
+    try {
+      const signatureKey = `signature:${signature.signature}`;
+      await redis.set(signatureKey, JSON.stringify({
+        fileHash,
+        gmail: email,
+        timestamp,
+        publicKey: signature.publicKey,
+      }));
+
+      // Increment the signer's total signature count (used for trust levels)
+      await redis.incr(`user:${email}:signatures`);
+    } catch (redisError) {
+      console.warn("Redis operation failed in /api/sign:", redisError);
+      // Continue without Redis - signature generation still works
+    }
+
+    return NextResponse.json({ id: signature.signature, ...signature }, { status: 200 });
   } catch (err) {
     console.error("Signature generation failed", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

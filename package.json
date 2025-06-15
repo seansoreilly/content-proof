@@ -10,20 +10,21 @@
     "deploy": "vercel --prod"
   },
   "dependencies": {
+    "@vercel/kv": "^3.0.0",
     "lucide-react": "^0.515.0",
     "next": "15.3.3",
     "next-auth": "^4.24.11",
+    "qrcode": "^1.5.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "qrcode": "^1.5.1",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/qrcode": "^1.5.2",
     "autoprefixer": "^10.4.21",
     "eslint": "^9",
     "eslint-config-next": "15.3.3",

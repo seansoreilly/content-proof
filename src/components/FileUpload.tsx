@@ -145,16 +145,9 @@ export default function FileUpload() {
         />
         <p className="text-gray-700 text-center">
           Drag &amp; drop a file here, or{" "}
-          <label
-            htmlFor="fileInput"
-            className="font-semibold text-blue-600 hover:underline cursor-pointer"
-            onClick={(e) => {
-              e.stopPropagation();
-              onButtonClick();
-            }}
-          >
+          <span className="font-semibold text-blue-600 hover:underline cursor-pointer">
             browse
-          </label>
+          </span>
         </p>
       </div>
 
