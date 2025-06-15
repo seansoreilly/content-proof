@@ -253,8 +253,9 @@ export const QrCodeGenerator: React.FC<Props> = ({ signature, size = 256 }) => {
       {/* Usage instructions */}
       <div className="text-center max-w-sm">
         <p className="text-xs text-light-400 leading-relaxed">
-          Share this QR code with others to allow them to verify your file's
-          authenticity. They can scan it or use the verification link directly.
+          Share this QR code with others to allow them to verify your
+          file&apos;s authenticity. They can scan it or use the verification
+          link directly.
         </p>
       </div>
     </div>
