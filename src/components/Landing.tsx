@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import AnimatedBackground from "./AnimatedBackground";
+import GradientHeading from "./GradientHeading";
 
 const features = [
   {
@@ -24,11 +26,13 @@ export default function Landing() {
   return (
     <main className="relative flex flex-col items-center w-full overflow-hidden">
       {/* Animated Background Orbs */}
-      <div className="absolute inset-0 -z-10 pointer-events-none">
-        <div className="animate-float w-72 h-72 bg-accent-blue/20 blur-3xl rounded-full absolute -top-20 -left-20" />
-        <div className="animate-float w-96 h-96 bg-accent-purple/20 blur-3xl rounded-full absolute top-1/3 right-0" />
-        <div className="animate-float w-64 h-64 bg-accent-teal/20 blur-3xl rounded-full absolute bottom-0 left-1/4" />
-      </div>
+      <AnimatedBackground
+        orbs={[
+          "w-72 h-72 bg-accent-blue/20 -top-20 -left-20",
+          "w-96 h-96 bg-accent-purple/20 top-1/3 right-0",
+          "w-64 h-64 bg-accent-teal/20 bottom-0 left-1/4",
+        ]}
+      />
 
       {/* Hero */}
       <section className="py-32 px-4 text-center max-w-4xl">
@@ -40,9 +44,9 @@ export default function Landing() {
           </span>
         </div>
 
-        <h1 className="text-gradient-blue text-4xl md:text-6xl font-extrabold mb-6 animate-gradient-x bg-[length:200%_200%] bg-clip-text text-transparent">
+        <GradientHeading className="text-4xl md:text-6xl mb-6">
           Content&nbsp;Proof
-        </h1>
+        </GradientHeading>
         <p className="text-lg md:text-2xl text-light-600 mb-8 max-w-2xl mx-auto">
           Generate cryptographic signatures for your digital assets and verify
           authenticity in seconds.

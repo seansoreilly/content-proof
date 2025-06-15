@@ -2,16 +2,20 @@
 
 import FileUpload from "../../components/FileUpload";
 import Link from "next/link";
+import AnimatedBackground from "../../components/AnimatedBackground";
+import GradientHeading from "../../components/GradientHeading";
 
 export default function UploadPage() {
   return (
     <main className="relative flex flex-col items-center justify-center min-h-screen overflow-hidden p-4">
       {/* Animated Background */}
-      <div className="absolute inset-0 -z-10 pointer-events-none">
-        <div className="animate-float w-80 h-80 bg-accent-purple/20 blur-3xl rounded-full absolute -top-20 left-1/2 -translate-x-1/2" />
-        <div className="animate-float w-56 h-56 bg-accent-teal/20 blur-3xl rounded-full absolute bottom-10 right-10" />
-        <div className="animate-float w-64 h-64 bg-accent-blue/15 blur-3xl rounded-full absolute top-1/3 -left-20" />
-      </div>
+      <AnimatedBackground
+        orbs={[
+          "w-80 h-80 bg-accent-purple/20 -top-20 left-1/2 -translate-x-1/2",
+          "w-56 h-56 bg-accent-teal/20 bottom-10 right-10",
+          "w-64 h-64 bg-accent-blue/15 top-1/3 -left-20",
+        ]}
+      />
 
       {/* Back Navigation */}
       <div className="absolute top-6 left-6">
@@ -45,9 +49,9 @@ export default function UploadPage() {
         </div>
       </div>
 
-      <h1 className="text-gradient-blue text-3xl md:text-5xl font-extrabold mb-8 bg-[length:200%_200%] bg-clip-text text-transparent animate-gradient-x text-center">
+      <GradientHeading className="text-3xl md:text-5xl mb-8 text-center">
         Sign a File
-      </h1>
+      </GradientHeading>
 
       <div className="glass w-full max-w-lg">
         <FileUpload />
