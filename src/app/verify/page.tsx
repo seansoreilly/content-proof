@@ -16,9 +16,29 @@ interface SignatureData {
 
 function decodeSignatureData(encoded: string): SignatureData | null {
   try {
+    // Validate input
+    if (
+      !encoded ||
+      typeof encoded !== "string" ||
+      encoded.trim().length === 0
+    ) {
+      // Silent validation - return null without logging to avoid Next.js error handling
+      return null;
+    }
+
+    // Clean and validate the input string
+    const cleanEncoded = encoded.trim();
+
+    // Check for basic base64url characters (allow A-Z, a-z, 0-9, -, _, and =)
+    if (!/^[A-Za-z0-9\-_=]*$/.test(cleanEncoded)) {
+      // Silent validation - return null without logging to avoid Next.js error handling
+      return null;
+    }
+
     // Add required padding and convert Base64URL → Base64
-    const padding = encoded.length % 4 === 0 ? 0 : 4 - (encoded.length % 4);
-    const base64 = (encoded + "=".repeat(padding))
+    const padding =
+      cleanEncoded.length % 4 === 0 ? 0 : 4 - (cleanEncoded.length % 4);
+    const base64 = (cleanEncoded + "=".repeat(padding))
       .replace(/-/g, "+")
       .replace(/_/g, "/");
 
@@ -28,7 +48,14 @@ function decodeSignatureData(encoded: string): SignatureData | null {
       jsonStr = Buffer.from(base64, "base64").toString("utf8");
     } else {
       // Browser environment - properly decode UTF-8
-      const binaryString = window.atob(base64);
+      let binaryString: string;
+      try {
+        binaryString = window.atob(base64);
+      } catch {
+        // Silent validation - return null without logging to avoid Next.js error handling
+        return null;
+      }
+
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
@@ -36,9 +63,25 @@ function decodeSignatureData(encoded: string): SignatureData | null {
       jsonStr = new TextDecoder("utf-8").decode(bytes);
     }
 
-    return JSON.parse(jsonStr);
-  } catch (err) {
-    console.error("Failed to decode signature data", err);
+    // Parse JSON and validate structure
+    const parsed = JSON.parse(jsonStr);
+
+    // Validate that the parsed object has the expected structure
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    if (
+      !parsed.signature ||
+      !parsed.publicKey ||
+      typeof parsed.timestamp !== "number"
+    ) {
+      return null;
+    }
+
+    return parsed as SignatureData;
+  } catch {
+    // Silent error handling - return null without logging to avoid Next.js error handling
     return null;
   }
 }
@@ -109,27 +152,26 @@ function VerifyPageContent() {
       return;
     }
 
-    try {
-      // Try to decode the manual signature as if it's base64url encoded data
-      const decoded = decodeSignatureData(manualSignature.trim());
-      if (decoded) {
-        setSigData(decoded);
-        setStatus("idle");
-        setMessage(null);
+    // Clear any previous status/message
+    setStatus("idle");
+    setMessage(null);
 
-        // Cache public key for offline use
-        try {
-          localStorage.setItem("cached_ed25519_pub", decoded.publicKey);
-        } catch {}
-      } else {
-        setStatus("error");
-        setMessage(
-          "Invalid signature format. Please check your signature data."
-        );
-      }
-    } catch {
+    // Try to decode the manual signature as if it's base64url encoded data
+    const decoded = decodeSignatureData(manualSignature.trim());
+    if (decoded) {
+      setSigData(decoded);
+      setStatus("idle");
+      setMessage(null);
+
+      // Cache public key for offline use
+      try {
+        localStorage.setItem("cached_ed25519_pub", decoded.publicKey);
+      } catch {}
+    } else {
       setStatus("error");
-      setMessage("Invalid signature format. Please check your signature data.");
+      setMessage(
+        "Invalid signature format. Please ensure you've copied the complete signature data without any extra characters or line breaks."
+      );
     }
   }, [manualSignature]);
 
