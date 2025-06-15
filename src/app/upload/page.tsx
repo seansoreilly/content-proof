@@ -29,6 +29,14 @@ export default function UploadPage() {
       <div className="glass w-full max-w-lg">
         <FileUpload />
       </div>
+
+      {/* Security Note */}
+      <div className="mt-8 max-w-lg text-center">
+        <p className="text-sm text-light-500">
+          🔒 Your files are processed locally and never stored on our servers.
+          Only cryptographic signatures are generated for verification.
+        </p>
+      </div>
     </main>
   );
 }

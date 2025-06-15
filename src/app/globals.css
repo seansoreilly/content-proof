@@ -44,10 +44,12 @@ body::before {
 /* Glassmorphism */
 .glass {
   @apply backdrop-blur-md bg-white/30 shadow-glass border border-white/40 rounded-xl;
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .glass-dark {
   @apply backdrop-blur-lg bg-black/30 shadow-glass border border-white/20 rounded-xl;
+  -webkit-backdrop-filter: blur(16px);
 }
 
 /* Glow Effects */
@@ -114,6 +116,57 @@ body::before {
   border-radius: 50%;
   animation: spinner 1s linear infinite;
 }
+
+/* Accessibility: Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-glow,
+  .animate-pulse-slow,
+  .animate-gradient-x,
+  .spinner {
+    animation: none;
+  }
+  
+  .card-hover {
+    transform: none;
+  }
+  
+  .btn-primary:hover,
+  .btn-secondary:hover {
+    transform: none;
+  }
+}
+
+/* Focus states for accessibility */
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* Responsive text sizing */
+@media (max-width: 640px) {
+  .text-4xl {
+    font-size: 2.25rem;
+    line-height: 2.5rem;
+  }
+  
+  .text-6xl {
+    font-size: 3rem;
+    line-height: 1;
+  }
+}
+
+/* Ensure minimum touch targets on mobile */
+@media (max-width: 768px) {
+  .btn-primary,
+  .btn-secondary {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Enhanced glass effects for better browser support */
 
 * {
   box-sizing: border-box;

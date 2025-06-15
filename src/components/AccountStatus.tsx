@@ -10,10 +10,12 @@ export function AccountStatus() {
 
   if (allowed === false) {
     return (
-      <p className="mt-4 text-sm text-red-600">
-        Your account is not authorized to access this application. Please
-        contact support.
-      </p>
+      <div className="glass-dark mt-4 p-4 border border-red-400/30">
+        <p className="text-sm text-red-400 font-medium">
+          Your account is not authorized to access this application. Please
+          contact support.
+        </p>
+      </div>
     );
   }
 

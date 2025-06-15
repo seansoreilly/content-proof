@@ -55,28 +55,31 @@ export const QrCodeGenerator: React.FC<Props> = ({ signature, size = 256 }) => {
 
   if (!dataUrl) {
     return (
-      <p className="text-gray-600 mt-2 animate-pulse">Generating QR code…</p>
+      <div className="flex items-center justify-center mt-4 p-4">
+        <div className="spinner mr-2"></div>
+        <p className="text-light-600 font-medium">Generating QR code…</p>
+      </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center gap-2 mt-4">
+    <div className="glass flex flex-col items-center gap-4 mt-4 p-6">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={dataUrl}
         alt="QR code containing the verification link"
         width={size}
         height={size}
-        className="border rounded"
+        className="border border-white/20 rounded-lg shadow-lg"
       />
       {verificationUrl && (
-        <div className="flex flex-col items-center gap-1 max-w-md break-all">
-          <code className="text-xs bg-gray-100 p-2 rounded">
+        <div className="flex flex-col items-center gap-3 max-w-md break-all">
+          <code className="text-xs glass-dark p-3 rounded text-light-600 w-full text-center">
             {verificationUrl}
           </code>
           <button
             onClick={() => navigator.clipboard.writeText(verificationUrl)}
-            className="text-blue-600 hover:underline text-sm"
+            className="text-accent-blue hover:text-accent-purple transition-colors text-sm font-medium"
           >
             Copy verification link
           </button>
@@ -85,7 +88,7 @@ export const QrCodeGenerator: React.FC<Props> = ({ signature, size = 256 }) => {
       <a
         href={dataUrl}
         download="signature_qrcode.png"
-        className="text-blue-600 hover:underline text-sm"
+        className="btn-secondary text-sm"
       >
         Download PNG
       </a>

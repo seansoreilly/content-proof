@@ -6,14 +6,17 @@ const features = [
   {
     title: "Secure Signatures",
     desc: "Every file is signed with Ed25519 ensuring tamper-proof authenticity.",
+    icon: "🔐",
   },
   {
     title: "QR Code Sharing",
     desc: "Share verification data instantly via downloadable QR codes.",
+    icon: "📱",
   },
   {
     title: "Offline Verification",
     desc: "Verification works even without an internet connection.",
+    icon: "🔒",
   },
 ];
 
@@ -29,6 +32,14 @@ export default function Landing() {
 
       {/* Hero */}
       <section className="py-32 px-4 text-center max-w-4xl">
+        {/* Security Badge */}
+        <div className="inline-flex items-center gap-2 glass px-4 py-2 mb-6">
+          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse-slow"></div>
+          <span className="text-sm text-light-600 font-medium">
+            Secure • Ed25519 Verified
+          </span>
+        </div>
+
         <h1 className="text-gradient-blue text-4xl md:text-6xl font-extrabold mb-6 animate-gradient-x bg-[length:200%_200%] bg-clip-text text-transparent">
           Content&nbsp;Proof
         </h1>
@@ -54,6 +65,7 @@ export default function Landing() {
             style={{ animationDelay: `${idx * 200}ms` }}
             className="glass p-6 card-hover animate-float"
           >
+            <div className="text-3xl mb-3">{f.icon}</div>
             <h3 className="font-semibold text-lg mb-2 text-light-600">
               {f.title}
             </h3>
@@ -65,8 +77,7 @@ export default function Landing() {
       {/* Trust Indicators */}
       <section className="w-full bg-white/5 backdrop-blur-sm py-12 border-t border-white/10">
         <p className="text-center text-sm text-light-500">
-          Built with industry standard Ed25519 signatures &bull; All
-          verifications occur locally &bull; No data stored on our servers
+          Built with industry standard Ed25519 signatures
         </p>
       </section>
     </main>

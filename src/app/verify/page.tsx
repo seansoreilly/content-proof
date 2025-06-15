@@ -161,52 +161,99 @@ function VerifyPageContent() {
       </h1>
 
       {status === "error" && message && (
-        <p className="text-red-600 font-medium max-w-md text-center">
-          {message}
-        </p>
+        <div className="glass-dark p-4 border border-red-400/30 max-w-md">
+          <p className="text-red-400 font-medium text-center">{message}</p>
+        </div>
       )}
 
       {sigData && (
-        <>
-          <input type="file" onChange={onFileChange} />
+        <div className="glass p-6 w-full max-w-md space-y-4">
+          <div className="space-y-2">
+            <label
+              htmlFor="fileInput"
+              className="block text-sm font-medium text-light-600"
+            >
+              Select Original File
+            </label>
+            <input
+              id="fileInput"
+              type="file"
+              onChange={onFileChange}
+              className="glass w-full px-3 py-2 text-light-600 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-accent-blue file:text-white hover:file:bg-accent-purple"
+            />
+          </div>
 
-          {authStatus === "authenticated" && session?.user?.email ? (
-            <input
-              type="email"
-              className="glass-dark w-full px-3 py-2 cursor-not-allowed backdrop-blur-xs"
-              value={session.user.email}
-              disabled
-              readOnly
-            />
-          ) : (
-            <input
-              type="email"
-              className="glass w-full px-3 py-2"
-              placeholder="Gmail address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          )}
+          <div className="space-y-2">
+            <label
+              htmlFor="emailInput"
+              className="block text-sm font-medium text-light-600"
+            >
+              Gmail Address
+            </label>
+            {authStatus === "authenticated" && session?.user?.email ? (
+              <input
+                id="emailInput"
+                type="email"
+                className="glass-dark w-full px-3 py-2 cursor-not-allowed backdrop-blur-xs text-light-500"
+                value={session.user.email}
+                disabled
+                readOnly
+              />
+            ) : (
+              <input
+                id="emailInput"
+                type="email"
+                className="glass w-full px-3 py-2 text-light-600"
+                placeholder="Enter Gmail address used during signing"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            )}
+          </div>
 
           <button
-            className="btn-primary disabled:opacity-50"
+            className="btn-primary w-full disabled:opacity-50 flex items-center justify-center gap-2"
             disabled={status === "verifying"}
             onClick={verify}
           >
-            {status === "verifying" ? "Verifying…" : "Verify"}
+            {status === "verifying" && <div className="spinner"></div>}
+            {status === "verifying" ? "Verifying…" : "Verify Signature"}
           </button>
 
-          {status !== "idle" && status !== "verifying" && message && (
-            <p
-              className={`font-medium max-w-md text-center ${
-                status === "success" ? "text-green-600" : "text-red-600"
-              }`}
-            >
-              {message}
-            </p>
+          {status === "success" && message && (
+            <div className="glass p-4 border border-green-400/30 bg-green-400/10">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full bg-green-400 flex items-center justify-center">
+                  <span className="text-white text-xs">✓</span>
+                </div>
+                <p className="text-green-400 font-medium">{message}</p>
+              </div>
+              <p className="text-light-500 text-sm mt-2">
+                Verified at {new Date().toLocaleString()}
+              </p>
+            </div>
           )}
-        </>
+
+          {status === "failure" && message && (
+            <div className="glass-dark p-4 border border-red-400/30">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full bg-red-400 flex items-center justify-center">
+                  <span className="text-white text-xs">✗</span>
+                </div>
+                <p className="text-red-400 font-medium">{message}</p>
+              </div>
+            </div>
+          )}
+        </div>
       )}
+
+      {/* Security Note */}
+      <div className="mt-8 max-w-md text-center">
+        <p className="text-sm text-light-500">
+          🔒 All verification happens locally in your browser. No files or data
+          are transmitted to our servers.
+        </p>
+      </div>
     </main>
   );
 }
