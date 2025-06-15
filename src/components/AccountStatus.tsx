@@ -6,7 +6,6 @@ export function AccountStatus() {
 
   if (status !== "authenticated") return null;
 
-  // @ts-ignore - allowed added in next-auth.d.ts augmentation
   const allowed: boolean | undefined = session.user?.allowed;
 
   if (allowed === false) {
