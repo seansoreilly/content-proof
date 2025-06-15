@@ -94,7 +94,7 @@ export default function Landing({ authSection, session }: LandingProps) {
             </button>
           )}
           <Link href="/verify" className="btn-secondary">
-            Verify signature
+            Verify a file
           </Link>
         </div>
       </section>

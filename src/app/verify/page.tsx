@@ -267,7 +267,7 @@ function VerifyPageContent() {
       </div>
 
       <h1 className="text-gradient-blue text-3xl md:text-5xl font-extrabold mb-8 bg-[length:200%_200%] bg-clip-text text-transparent animate-gradient-x text-center">
-        Signature Verification
+        Verify
       </h1>
 
       {status === "error" && message && (
