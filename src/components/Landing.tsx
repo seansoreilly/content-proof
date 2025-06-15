@@ -3,6 +3,7 @@
 import Link from "next/link";
 import AnimatedBackground from "./AnimatedBackground";
 import GradientHeading from "./GradientHeading";
+import { DevelopmentBuildInfo } from "./ui/BuildInfo";
 
 const features = [
   {
@@ -84,6 +85,12 @@ export default function Landing() {
           Built with industry standard Ed25519 signatures
         </p>
       </section>
+
+        {/* Footer with Build Info */}
+        <footer className="mt-16 pt-8 border-t border-gray-200">
+          <DevelopmentBuildInfo />
+        </footer>
+
     </main>
   );
 }

@@ -8,7 +8,7 @@ import { GA_TRACKING_ID } from "@/lib/analytics";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Content Proof"
+  title: "Content Proof",
   description: "Secure your files",
 };
 
