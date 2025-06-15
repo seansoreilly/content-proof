@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import AnimatedBackground from "./AnimatedBackground";
 import GradientHeading from "./GradientHeading";
 import { DevelopmentBuildInfo } from "./ui/BuildInfo";
+import { Session } from "next-auth";
 
 const features = [
   {
@@ -25,9 +27,18 @@ const features = [
 
 interface LandingProps {
   authSection?: React.ReactNode;
+  session?: Session | null;
 }
 
-export default function Landing({ authSection }: LandingProps) {
+export default function Landing({ authSection, session }: LandingProps) {
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
+
+  const isSignedIn = !!session;
+
   return (
     <main className="relative flex flex-col items-center w-full overflow-hidden">
       {/* Animated Background Orbs */}
@@ -61,9 +72,27 @@ export default function Landing({ authSection }: LandingProps) {
         {authSection && <div className="mb-8">{authSection}</div>}
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link href="/upload" className="btn-primary">
-            Sign a file
-          </Link>
+          {!isHydrated ? (
+            // Show placeholder during hydration to prevent mismatch
+            <button
+              className="btn-primary opacity-50 cursor-not-allowed"
+              disabled
+            >
+              Sign a file
+            </button>
+          ) : isSignedIn ? (
+            <Link href="/upload" className="btn-primary">
+              Sign a file
+            </Link>
+          ) : (
+            <button
+              className="btn-primary opacity-50 cursor-not-allowed"
+              disabled
+              title="Please sign in to upload files"
+            >
+              Sign a file
+            </button>
+          )}
           <Link href="/verify" className="btn-secondary">
             Verify signature
           </Link>

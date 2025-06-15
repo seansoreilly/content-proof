@@ -24,5 +24,5 @@ export default async function Home() {
     </div>
   );
 
-  return <Landing authSection={authSection} />;
+  return <Landing authSection={authSection} session={session} />;
 }
