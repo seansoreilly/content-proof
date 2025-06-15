@@ -70,34 +70,37 @@ export default function FileUpload() {
 
     setLoading(true);
     try {
-      console.log(`Starting file hash generation for: ${file.name} (${file.size} bytes)`);
+      console.log(
+        `Starting file hash generation for: ${file.name} (${file.size} bytes)`
+      );
       const hash = await sha256Hash(file);
       console.log(`Generated hash: ${hash}`);
       setHashResult({ fileName: file.name, fileSize: file.size, hash });
 
-      console.log('Initiating signature request to /api/sign');
+      console.log("Initiating signature request to /api/sign");
       const res = await fetch("/api/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileHash: hash }),
       });
-      
+
       if (!res.ok) {
         console.error(`Signature API failed with status: ${res.status}`);
         throw new Error(`Signature API error: ${res.status}`);
       }
-      
-      const data = (await res.json()) as import("@/lib/crypto/ed25519").SignatureData;
-      console.log('Successfully received signature data');
+
+      const data =
+        (await res.json()) as import("@/lib/crypto/ed25519").SignatureData;
+      console.log("Successfully received signature data");
       setSignature(data);
-      
-      console.log('Tracking file signing event');
+
+      console.log("Tracking file signing event");
       trackSignFile();
-    } catch (err) {                                           
-      console.error('File signing process failed:', err);
+    } catch (err) {
+      console.error("File signing process failed:", err);
       setError("Failed to generate signature.");
     } finally {
-      console.log('File signing process completed');
+      console.log("File signing process completed");
       setLoading(false);
     }
   };
@@ -137,8 +140,8 @@ export default function FileUpload() {
   return (
     <div className="w-full max-w-lg mx-auto p-4">
       <div
-        className={`border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer transition-colors duration-200 ${
-          dragActive ? "border-blue-500 bg-blue-50" : "border-gray-300"
+        className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer transition-colors duration-200 backdrop-blur-sm bg-white/10 ${
+          dragActive ? "border-accent-blue bg-accent-blue/5" : "border-white/20"
         }`}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
@@ -153,23 +156,25 @@ export default function FileUpload() {
           className="hidden"
           onChange={onFileChange}
         />
-        <p className="text-gray-700 text-center">
+        <p className="text-light-600 text-center">
           Drag &amp; drop a file here, or{" "}
-          <span className="font-semibold text-blue-600 hover:underline cursor-pointer">
+          <span className="font-semibold text-accent-blue hover:underline cursor-pointer">
             browse
           </span>
         </p>
       </div>
 
       {loading && (
-        <p className="mt-4 text-blue-500 animate-pulse">Generating hash...</p>
+        <p className="mt-4 text-accent-blue animate-pulse font-medium">
+          Generating hash...
+        </p>
       )}
 
       {error && <p className="mt-4 text-red-500 font-medium">Error: {error}</p>}
 
       {previewUrl && (
         <div className="mt-4">
-          <p className="font-medium mb-2">Preview:</p>
+          <p className="font-medium mb-2 text-light-600">Preview:</p>
           <Image
             src={previewUrl}
             alt="File preview"
@@ -182,15 +187,17 @@ export default function FileUpload() {
 
       {hashResult && (
         <div className="mt-4 break-all">
-          <p className="font-medium">File: {hashResult.fileName}</p>
-          <p className="text-sm text-gray-600 mb-2">
+          <p className="font-medium text-light-600">
+            File: {hashResult.fileName}
+          </p>
+          <p className="text-sm text-light-500 mb-2">
             Size: {(hashResult.fileSize / 1024).toFixed(2)} KB
           </p>
-          <p className="font-mono text-xs bg-gray-100 p-2 rounded">
+          <p className="font-mono text-xs glass p-3 rounded text-light-600">
             {hashResult.hash}
           </p>
           <button
-            className="mt-2 text-blue-600 hover:underline"
+            className="mt-2 text-accent-blue hover:text-accent-purple transition-colors font-medium"
             onClick={async () => {
               try {
                 await navigator.clipboard.writeText(hashResult.hash);
@@ -206,7 +213,7 @@ export default function FileUpload() {
 
       {signature && (
         <div className="mt-6">
-          <p className="font-medium text-center">
+          <p className="font-medium text-center text-light-600">
             QR Code with embedded verification link:
           </p>
           <QrCodeGenerator signature={signature} />

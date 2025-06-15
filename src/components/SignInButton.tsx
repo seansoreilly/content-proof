@@ -19,9 +19,9 @@ export function SignInButton() {
 
         signIn("google");
       }}
-      className="px-4 py-2 bg-blue-600 text-white rounded"
+      className="btn-primary flex items-center gap-2"
     >
-      Sign in with Google
+      <span className="text-white">Sign in with Google</span>
     </button>
   );
 }

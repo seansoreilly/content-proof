@@ -143,8 +143,22 @@ function VerifyPageContent() {
   }, [sigData, file, email]);
 
   return (
-    <main className="flex flex-col items-center gap-4 min-h-screen p-4">
-      <h1 className="text-2xl font-bold">Signature Verification</h1>
+    <main className="relative flex flex-col items-center gap-4 min-h-screen overflow-hidden p-4">
+      {/* Animated Background */}
+      <div className="absolute inset-0 -z-10 pointer-events-none">
+        <div className="animate-float w-72 h-72 bg-accent-blue/20 blur-3xl rounded-full absolute -top-24 -left-24" />
+        <div className="animate-float w-64 h-64 bg-accent-purple/20 blur-3xl rounded-full absolute bottom-0 right-0" />
+      </div>
+      <a
+        href="/"
+        aria-label="Back"
+        className="btn-secondary absolute top-6 left-6 backdrop-blur-xs"
+      >
+        ← Home
+      </a>
+      <h1 className="text-gradient-blue text-3xl md:text-5xl font-extrabold mb-8 bg-[length:200%_200%] bg-clip-text text-transparent animate-gradient-x text-center">
+        Signature Verification
+      </h1>
 
       {status === "error" && message && (
         <p className="text-red-600 font-medium max-w-md text-center">
@@ -159,7 +173,7 @@ function VerifyPageContent() {
           {authStatus === "authenticated" && session?.user?.email ? (
             <input
               type="email"
-              className="border rounded px-3 py-2 bg-gray-100 cursor-not-allowed"
+              className="glass-dark w-full px-3 py-2 cursor-not-allowed backdrop-blur-xs"
               value={session.user.email}
               disabled
               readOnly
@@ -167,7 +181,7 @@ function VerifyPageContent() {
           ) : (
             <input
               type="email"
-              className="border rounded px-3 py-2"
+              className="glass w-full px-3 py-2"
               placeholder="Gmail address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -175,7 +189,7 @@ function VerifyPageContent() {
           )}
 
           <button
-            className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
+            className="btn-primary disabled:opacity-50"
             disabled={status === "verifying"}
             onClick={verify}
           >

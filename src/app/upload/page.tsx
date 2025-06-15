@@ -4,11 +4,31 @@ import FileUpload from "../../components/FileUpload";
 
 export default function UploadPage() {
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen p-4">
-      <h1 className="text-2xl font-bold mb-6">
-        File Upload & SHA-256 Hash Generator
+    <main className="relative flex flex-col items-center justify-center min-h-screen overflow-hidden p-4">
+      {/* Animated Background */}
+      <div className="absolute inset-0 -z-10 pointer-events-none">
+        <div className="animate-float w-80 h-80 bg-accent-purple/20 blur-3xl rounded-full absolute -top-20 left-1/2 -translate-x-1/2" />
+        <div className="animate-float w-56 h-56 bg-accent-teal/20 blur-3xl rounded-full absolute bottom-10 right-10" />
+      </div>
+
+      {/* Back Navigation */}
+      <div className="absolute top-6 left-6">
+        <a
+          href="/"
+          aria-label="Back to home"
+          className="btn-secondary backdrop-blur-xs"
+        >
+          ← Home
+        </a>
+      </div>
+
+      <h1 className="text-gradient-blue text-3xl md:text-5xl font-extrabold mb-8 bg-[length:200%_200%] bg-clip-text text-transparent animate-gradient-x text-center">
+        Sign a File
       </h1>
-      <FileUpload />
+
+      <div className="glass w-full max-w-lg">
+        <FileUpload />
+      </div>
     </main>
   );
 }
