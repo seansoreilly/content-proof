@@ -52,32 +52,28 @@ function VerifyPageContent() {
   const [sigData, setSigData] = useState<SignatureData | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [email, setEmail] = useState<string>("");
+  const [manualSignature, setManualSignature] = useState<string>("");
   const [status, setStatus] = useState<
     "idle" | "verifying" | "success" | "failure" | "error"
   >("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [verificationTime, setVerificationTime] = useState<Date | null>(null);
 
-  // Decode data on first render
+  // Decode data on first render if URL parameter is provided
   useEffect(() => {
-    if (!encodedData) {
-      setStatus("error");
-      setMessage("Missing verification data in URL.");
-      return;
+    if (encodedData) {
+      const decoded = decodeSignatureData(encodedData);
+      if (decoded) {
+        setSigData(decoded);
+        // Cache public key for offline use
+        try {
+          localStorage.setItem("cached_ed25519_pub", decoded.publicKey);
+        } catch {}
+      } else {
+        setStatus("error");
+        setMessage("Invalid verification data in URL.");
+      }
     }
-
-    const decoded = decodeSignatureData(encodedData);
-    if (!decoded) {
-      setStatus("error");
-      setMessage("Invalid verification data.");
-      return;
-    }
-    setSigData(decoded);
-
-    // Cache public key for offline use
-    try {
-      localStorage.setItem("cached_ed25519_pub", decoded.publicKey);
-    } catch {}
   }, [encodedData]);
 
   // Fallback to cached public key (offline)
@@ -106,8 +102,50 @@ function VerifyPageContent() {
     }
   };
 
+  const handleManualSignatureSubmit = useCallback(() => {
+    if (!manualSignature.trim()) {
+      setStatus("error");
+      setMessage("Please enter a signature.");
+      return;
+    }
+
+    try {
+      // Try to decode the manual signature as if it's base64url encoded data
+      const decoded = decodeSignatureData(manualSignature.trim());
+      if (decoded) {
+        setSigData(decoded);
+        setStatus("idle");
+        setMessage(null);
+
+        // Cache public key for offline use
+        try {
+          localStorage.setItem("cached_ed25519_pub", decoded.publicKey);
+        } catch {}
+      } else {
+        setStatus("error");
+        setMessage(
+          "Invalid signature format. Please check your signature data."
+        );
+      }
+    } catch {
+      setStatus("error");
+      setMessage("Invalid signature format. Please check your signature data.");
+    }
+  }, [manualSignature]);
+
+  const clearSignature = useCallback(() => {
+    setSigData(null);
+    setManualSignature("");
+    setStatus("idle");
+    setMessage(null);
+  }, []);
+
   const verify = useCallback(async () => {
-    if (!sigData) return;
+    if (!sigData) {
+      setStatus("error");
+      setMessage("Please load a signature first.");
+      return;
+    }
 
     if (!file) {
       setMessage("Please select the original file.");
@@ -211,123 +249,218 @@ function VerifyPageContent() {
         </div>
       )}
 
-      {sigData && (
-        <div className="glass p-6 w-full max-w-md space-y-4">
-          <div className="space-y-2">
-            <label
-              htmlFor="fileInput"
-              className="block text-sm font-medium text-light-600"
-            >
-              Select file to verify
-            </label>
-            <input
-              id="fileInput"
-              type="file"
-              onChange={onFileChange}
-              className="glass w-full px-3 py-2 text-light-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-medium file:bg-gradient-to-r file:from-accent-blue file:to-accent-purple file:text-white hover:file:from-accent-purple hover:file:to-accent-teal transition-all duration-300"
-            />
-          </div>
+      <div className="glass p-6 w-full max-w-md space-y-6">
+        {/* Signature Section */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-light-600">
+            Step 1: Load Signature
+          </h2>
 
-          <div className="space-y-2">
-            <label
-              htmlFor="emailInput"
-              className="block text-sm font-medium text-light-600"
-            >
-              Gmail Address
-            </label>
-            {authStatus === "authenticated" && session?.user?.email ? (
-              <input
-                id="emailInput"
-                type="email"
-                className="glass w-full px-3 py-2 cursor-not-allowed text-light-600 bg-white/10"
-                value={session.user.email}
-                disabled
-                readOnly
-              />
-            ) : (
-              <input
-                id="emailInput"
-                type="email"
-                className="glass w-full px-3 py-2 text-light-600 focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue/50 transition-all duration-300"
-                placeholder="Enter Gmail address used during signing"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            )}
-          </div>
-
-          <button
-            className="btn-primary w-full disabled:opacity-50 flex items-center justify-center gap-2 relative overflow-hidden"
-            disabled={status === "verifying"}
-            onClick={verify}
-          >
-            {status === "verifying" && (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-            )}
-            {status === "verifying" ? "Verifying…" : "Verify Signature"}
-          </button>
-
-          {status === "success" && message && (
-            <div className="glass p-4 border border-green-400/30 bg-green-400/10 animate-in fade-in duration-500">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-green-400 flex items-center justify-center glow-green">
-                  <svg
-                    className="w-3 h-3 text-white"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-                <p className="text-green-400 font-medium">{message}</p>
-              </div>
-              {verificationTime && (
-                <p className="text-light-500 text-sm mt-2 flex items-center gap-1">
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  Verified at {verificationTime.toLocaleString()}
+          {!sigData ? (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <label
+                  htmlFor="signatureInput"
+                  className="block text-sm font-medium text-light-600"
+                >
+                  Enter Signature Data
+                </label>
+                <textarea
+                  id="signatureInput"
+                  className="glass w-full px-3 py-2 text-light-600 focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue/50 transition-all duration-300 min-h-[100px] resize-y"
+                  placeholder="Paste your signature data here (base64url encoded)"
+                  value={manualSignature}
+                  onChange={(e) => setManualSignature(e.target.value)}
+                />
+                <p className="text-xs text-light-500">
+                  {encodedData
+                    ? "URL signature loaded, or enter a different signature above."
+                    : "Enter the complete signature data you received when the file was signed."}
                 </p>
-              )}
-            </div>
-          )}
-
-          {status === "failure" && message && (
-            <div className="glass p-4 border border-red-400/30 bg-red-400/10 animate-in fade-in duration-500">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-red-400 flex items-center justify-center">
-                  <svg
-                    className="w-3 h-3 text-white"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-                <p className="text-red-400 font-medium">{message}</p>
               </div>
+
+              <button
+                className="btn-primary w-full flex items-center justify-center gap-2"
+                onClick={handleManualSignatureSubmit}
+                disabled={!manualSignature.trim()}
+              >
+                Load Signature
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="glass p-3 border border-green-400/30 bg-green-400/10">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-5 h-5 rounded-full bg-green-400 flex items-center justify-center">
+                    <svg
+                      className="w-3 h-3 text-white"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </div>
+                  <p className="text-green-400 font-medium text-sm">
+                    Signature Loaded
+                  </p>
+                </div>
+                <p className="text-light-500 text-xs">
+                  Timestamp: {new Date(sigData.timestamp).toLocaleString()}
+                </p>
+              </div>
+
+              <button
+                className="btn-secondary w-full text-sm"
+                onClick={clearSignature}
+              >
+                Load Different Signature
+              </button>
             </div>
           )}
         </div>
-      )}
+
+        {/* Divider */}
+        <div className="border-t border-light-300/20"></div>
+
+        {/* File Verification Section */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-light-600">
+            Step 2: Verify File
+          </h2>
+
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <label
+                htmlFor="fileInput"
+                className="block text-sm font-medium text-light-600"
+              >
+                Select file to verify
+              </label>
+              <input
+                id="fileInput"
+                type="file"
+                onChange={onFileChange}
+                className="glass w-full px-3 py-2 text-light-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-medium file:bg-gradient-to-r file:from-accent-blue file:to-accent-purple file:text-white hover:file:from-accent-purple hover:file:to-accent-teal transition-all duration-300"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="emailInput"
+                className="block text-sm font-medium text-light-600"
+              >
+                Gmail Address
+              </label>
+              {authStatus === "authenticated" && session?.user?.email ? (
+                <input
+                  id="emailInput"
+                  type="email"
+                  className="glass w-full px-3 py-2 cursor-not-allowed text-light-600 bg-white/10"
+                  value={session.user.email}
+                  disabled
+                  readOnly
+                />
+              ) : (
+                <input
+                  id="emailInput"
+                  type="email"
+                  className="glass w-full px-3 py-2 text-light-600 focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue/50 transition-all duration-300"
+                  placeholder="Enter Gmail address used during signing"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              )}
+            </div>
+
+            <button
+              className="btn-primary w-full disabled:opacity-50 flex items-center justify-center gap-2 relative overflow-hidden"
+              disabled={status === "verifying" || !sigData}
+              onClick={verify}
+            >
+              {status === "verifying" && (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              )}
+              {status === "verifying" ? "Verifying…" : "Verify Signature"}
+            </button>
+          </div>
+        </div>
+
+        {/* Results Section */}
+        {(status === "success" || status === "failure") && message && (
+          <>
+            <div className="border-t border-light-300/20"></div>
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-light-600">
+                Verification Result
+              </h2>
+
+              {status === "success" && (
+                <div className="glass p-4 border border-green-400/30 bg-green-400/10 animate-in fade-in duration-500">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-green-400 flex items-center justify-center glow-green">
+                      <svg
+                        className="w-3 h-3 text-white"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-green-400 font-medium">{message}</p>
+                  </div>
+                  {verificationTime && (
+                    <p className="text-light-500 text-sm mt-2 flex items-center gap-1">
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      Verified at {verificationTime.toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {status === "failure" && (
+                <div className="glass p-4 border border-red-400/30 bg-red-400/10 animate-in fade-in duration-500">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-red-400 flex items-center justify-center">
+                      <svg
+                        className="w-3 h-3 text-white"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-red-400 font-medium">{message}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Security Note */}
       <div className="mt-8 max-w-md text-center">
