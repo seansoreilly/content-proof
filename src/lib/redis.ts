@@ -20,6 +20,10 @@ const mockRedis = {
   async expire(key: string, seconds: number): Promise<number> {
     console.warn(`[DEV] Redis EXPIRE ${key} ${seconds}s - using mock`);
     return 1;
+  },
+  async del(key: string): Promise<number> {
+    console.warn(`[DEV] Redis DEL ${key} - using mock`);
+    return 1;
   }
 };
 

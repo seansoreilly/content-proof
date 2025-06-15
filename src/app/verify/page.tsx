@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { sha256Hash } from "@/lib/hash";
 import { verifyEd25519Signature } from "@/lib/crypto/verify";
+import { trackVerifySignature } from "@/lib/analytics";
 
 interface SignatureData {
   signature: string;
@@ -118,6 +119,7 @@ function VerifyPageContent() {
         sigData.signature,
         sigData.publicKey
       );
+      trackVerifySignature(ok ? "success" : "failure");
       setStatus(ok ? "success" : "failure");
       setMessage(
         ok

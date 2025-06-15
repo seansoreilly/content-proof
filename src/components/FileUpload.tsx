@@ -4,6 +4,7 @@ import React, { useRef, useState } from "react";
 import Image from "next/image";
 import { QrCodeGenerator } from "@/components/QrCodeGenerator";
 import { sha256Hash } from "@/lib/hash";
+import { trackSignFile } from "@/lib/analytics";
 
 interface HashResult {
   fileName: string;
@@ -84,6 +85,8 @@ export default function FileUpload() {
       const data =
         (await res.json()) as import("@/lib/crypto/ed25519").SignatureData;
       setSignature(data);
+      // Analytics: custom event for file signing
+      trackSignFile();
     } catch (err) {
       console.error(err);
       setError("Failed to generate signature.");
