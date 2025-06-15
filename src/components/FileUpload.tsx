@@ -229,7 +229,7 @@ export default function FileUpload() {
 
       {/* Enhanced Error Display */}
       {error && (
-        <div className="glass-dark mt-4 p-4 border border-red-400/30 bg-red-400/10">
+        <div className="glass mt-4 p-4 border border-red-400/30 bg-red-400/10">
           <div className="flex items-center gap-2">
             <div className="w-5 h-5 rounded-full bg-red-400 flex items-center justify-center">
               <svg
@@ -326,7 +326,7 @@ export default function FileUpload() {
               SHA-256 Hash:
             </label>
             <div className="relative">
-              <div className="glass-dark p-3 rounded-lg font-mono text-xs text-light-600 break-all pr-12">
+              <div className="glass p-3 rounded-lg font-mono text-xs text-light-600 break-all pr-12 bg-white/5">
                 {hashResult.hash}
               </div>
               <button

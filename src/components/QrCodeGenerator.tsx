@@ -71,7 +71,7 @@ export const QrCodeGenerator: React.FC<Props> = ({ signature, size = 256 }) => {
 
   if (error) {
     return (
-      <div className="glass-dark p-4 border border-red-400/30 bg-red-400/10 animate-in fade-in duration-500">
+      <div className="glass p-4 border border-red-400/30 bg-red-400/10 animate-in fade-in duration-500">
         <div className="flex items-center gap-2">
           <div className="w-5 h-5 rounded-full bg-red-400 flex items-center justify-center">
             <svg
@@ -121,7 +121,7 @@ export const QrCodeGenerator: React.FC<Props> = ({ signature, size = 256 }) => {
       {/* Verification URL Section */}
       {verificationUrl && (
         <div className="w-full max-w-md space-y-3">
-          <div className="glass-dark p-4 rounded-lg relative">
+          <div className="glass p-4 rounded-lg relative bg-white/5">
             <p className="text-xs text-light-500 mb-2 font-medium">
               Verification Link:
             </p>

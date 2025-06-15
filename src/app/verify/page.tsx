@@ -239,7 +239,7 @@ function VerifyPageContent() {
               <input
                 id="emailInput"
                 type="email"
-                className="glass-dark w-full px-3 py-2 cursor-not-allowed backdrop-blur-xs text-light-500"
+                className="glass w-full px-3 py-2 cursor-not-allowed text-light-600 bg-white/10"
                 value={session.user.email}
                 disabled
                 readOnly
