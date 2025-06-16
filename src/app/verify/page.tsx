@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { sha256Hash } from "@/lib/hash";
 import { verifyEd25519Signature } from "@/lib/crypto/verify";
+import { base64UrlToString } from "@/lib/base64";
 import { trackVerifySignature } from "@/lib/analytics";
 import { useSession } from "next-auth/react";
 
@@ -16,62 +17,16 @@ interface SignatureData {
 
 function decodeSignatureData(encoded: string): SignatureData | null {
   try {
-    // Validate input
-    if (
-      !encoded ||
-      typeof encoded !== "string" ||
-      encoded.trim().length === 0
-    ) {
-      // Silent validation - return null without logging to avoid Next.js error handling
+    if (!encoded || typeof encoded !== "string" || encoded.trim().length === 0) {
       return null;
     }
 
-    // Clean and validate the input string
-    const cleanEncoded = encoded.trim();
-
-    // Check for basic base64url characters (allow A-Z, a-z, 0-9, -, _, and =)
-    if (!/^[A-Za-z0-9\-_=]*$/.test(cleanEncoded)) {
-      // Silent validation - return null without logging to avoid Next.js error handling
-      return null;
-    }
-
-    // Add required padding and convert Base64URL → Base64
-    const padding =
-      cleanEncoded.length % 4 === 0 ? 0 : 4 - (cleanEncoded.length % 4);
-    const base64 = (cleanEncoded + "=".repeat(padding))
-      .replace(/-/g, "+")
-      .replace(/_/g, "/");
-
-    let jsonStr: string;
-    if (typeof window === "undefined") {
-      // Node.js environment
-      jsonStr = Buffer.from(base64, "base64").toString("utf8");
-    } else {
-      // Browser environment - properly decode UTF-8
-      let binaryString: string;
-      try {
-        binaryString = window.atob(base64);
-      } catch {
-        // Silent validation - return null without logging to avoid Next.js error handling
-        return null;
-      }
-
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      jsonStr = new TextDecoder("utf-8").decode(bytes);
-    }
-
-    // Parse JSON and validate structure
+    const jsonStr = base64UrlToString(encoded.trim());
     const parsed = JSON.parse(jsonStr);
 
-    // Validate that the parsed object has the expected structure
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-
     if (
+      !parsed ||
+      typeof parsed !== "object" ||
       !parsed.signature ||
       !parsed.publicKey ||
       typeof parsed.timestamp !== "number"
@@ -81,7 +36,6 @@ function decodeSignatureData(encoded: string): SignatureData | null {
 
     return parsed as SignatureData;
   } catch {
-    // Silent error handling - return null without logging to avoid Next.js error handling
     return null;
   }
 }

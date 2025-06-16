@@ -12,4 +12,16 @@ export function fromBase64Url(base64url: string): Uint8Array {
   const bytes = new Uint8Array(len);
   for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
-} 
+}
+
+/**
+ * Convenience helper that decodes a Base64URL string directly to UTF-8.
+ * Uses {@link fromBase64Url} internally and handles both Node and browser
+ * environments.
+ */
+export function base64UrlToString(base64url: string): string {
+  const bytes = fromBase64Url(base64url);
+  return typeof window === "undefined"
+    ? Buffer.from(bytes).toString("utf8")
+    : new TextDecoder("utf-8").decode(bytes);
+}
