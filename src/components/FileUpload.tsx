@@ -35,6 +35,9 @@ export default function FileUpload() {
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  // Only show sensitive hash details in development or when explicitly enabled
+  const isDebug = process.env.NODE_ENV === "development";
+
   const resetState = () => {
     setHashResult(null);
     setError(null);
@@ -251,8 +254,8 @@ export default function FileUpload() {
 
       {/* Enhanced Preview Display */}
       {previewUrl && (
-        <div className="glass mt-4 p-4">
-          <p className="font-medium mb-3 text-light-600 flex items-center gap-2">
+        <details className="glass mt-4 p-4">
+          <summary className="cursor-pointer font-medium mb-3 text-light-600 flex items-center gap-2 select-none">
             <svg
               className="w-4 h-4"
               fill="none"
@@ -272,9 +275,9 @@ export default function FileUpload() {
                 d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
               />
             </svg>
-            Preview
-          </p>
-          <div className="relative rounded-lg overflow-hidden">
+            Preview (click to reveal)
+          </summary>
+          <div className="relative rounded-lg overflow-hidden mt-4">
             <Image
               src={previewUrl}
               alt="File preview"
@@ -283,7 +286,7 @@ export default function FileUpload() {
               className="max-h-64 w-full object-contain bg-white/5 rounded-lg"
             />
           </div>
-        </div>
+        </details>
       )}
 
       {/* Enhanced Hash Result Display */}
@@ -321,53 +324,55 @@ export default function FileUpload() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-light-600">
-              SHA-256 Hash:
-            </label>
-            <div className="relative">
-              <div className="glass p-3 rounded-lg font-mono text-xs text-light-600 break-all pr-12 bg-white/5">
-                {hashResult.hash}
+          {isDebug && (
+            <details className="space-y-2">
+              <summary className="cursor-pointer text-sm font-medium text-light-600 select-none">
+                SHA-256 Hash (click to reveal)
+              </summary>
+              <div className="relative mt-2">
+                <div className="glass p-3 rounded-lg font-mono text-xs text-light-600 break-all pr-12 bg-white/5">
+                  {hashResult.hash}
+                </div>
+                <button
+                  onClick={() => copyToClipboard(hashResult.hash)}
+                  className={`absolute top-2 right-2 p-1.5 rounded-md transition-all duration-200 ${
+                    copied
+                      ? "bg-green-400/20 text-green-400"
+                      : "bg-white/10 text-light-500 hover:bg-white/20 hover:text-accent-blue"
+                  }`}
+                  title={copied ? "Copied!" : "Copy hash"}
+                >
+                  {copied ? (
+                    <svg
+                      className="w-4 h-4"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      />
+                    </svg>
+                  )}
+                </button>
               </div>
-              <button
-                onClick={() => copyToClipboard(hashResult.hash)}
-                className={`absolute top-2 right-2 p-1.5 rounded-md transition-all duration-200 ${
-                  copied
-                    ? "bg-green-400/20 text-green-400"
-                    : "bg-white/10 text-light-500 hover:bg-white/20 hover:text-accent-blue"
-                }`}
-                title={copied ? "Copied!" : "Copy hash"}
-              >
-                {copied ? (
-                  <svg
-                    className="w-4 h-4"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                ) : (
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                    />
-                  </svg>
-                )}
-              </button>
-            </div>
-          </div>
+            </details>
+          )}
         </div>
       )}
 

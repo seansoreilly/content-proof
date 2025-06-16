@@ -118,6 +118,40 @@ export const QrCodeGenerator: React.FC<Props> = ({ signature, size = 256 }) => {
         </div>
       </div>
 
+      {/* Download button directly after QR code */}
+      <a
+        href={dataUrl}
+        download="signature_qrcode.png"
+        onClick={handleDownload}
+        className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-300 relative overflow-hidden group hover:scale-105 btn-primary ${
+          downloading ? "opacity-70 cursor-wait" : ""
+        }`}
+      >
+        {downloading ? (
+          <>
+            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+            Downloading...
+          </>
+        ) : (
+          <>
+            <svg
+              className="w-4 h-4 transition-transform duration-300"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            Download QR code
+          </>
+        )}
+      </a>
+
       {/* Verification URL Section */}
       {verificationUrl && (
         <div className="w-full max-w-md space-y-3">
@@ -171,10 +205,10 @@ export const QrCodeGenerator: React.FC<Props> = ({ signature, size = 256 }) => {
           <div className="flex flex-col sm:flex-row gap-3 w-full">
             <button
               onClick={copyToClipboard}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all duration-300 ${
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-300 relative overflow-hidden group hover:scale-105 ${
                 copied
                   ? "bg-green-400/20 text-green-400 border border-green-400/30"
-                  : "glass border border-white/20 text-light-600 hover:border-accent-blue/50 hover:text-accent-blue hover:bg-accent-blue/10"
+                  : "btn-primary"
               }`}
               disabled={copied}
             >
@@ -213,39 +247,13 @@ export const QrCodeGenerator: React.FC<Props> = ({ signature, size = 256 }) => {
               )}
             </button>
 
+            {/* Hidden old download button (kept for code consistency) */}
             <a
               href={dataUrl}
               download="signature_qrcode.png"
               onClick={handleDownload}
-              className="flex-1 flex items-center justify-center gap-2 btn-primary px-4 py-2.5 text-sm font-medium transition-all duration-300 hover:scale-105 relative overflow-hidden group"
-            >
-              {downloading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  Downloading...
-                </>
-              ) : (
-                <>
-                  <svg
-                    className="w-4 h-4 group-hover:scale-110 transition-transform duration-300"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                  Download PNG
-                </>
-              )}
-
-              {/* Hover effect overlay */}
-              <div className="absolute inset-0 bg-gradient-to-r from-accent-purple/20 to-accent-teal/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg"></div>
-            </a>
+              className="hidden"
+            />
           </div>
         </div>
       )}
