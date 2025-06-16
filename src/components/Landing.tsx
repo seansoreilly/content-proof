@@ -123,8 +123,17 @@ export default function Landing({ authSection, session }: LandingProps) {
         </p>
       </section>
 
-      {/* Footer with Build Info */}
-      <footer className="mt-16 pt-8 border-t border-gray-200">
+      {/* Footer with Links & Build Info */}
+      <footer className="mt-16 pt-8 border-t border-gray-200 space-y-4 text-center">
+        <div className="flex justify-center gap-4 text-sm text-light-500">
+          <Link href="/privacy" className="hover:underline">
+            Privacy Policy
+          </Link>
+          <span className="text-light-600">|</span>
+          <Link href="/how-it-works" className="hover:underline">
+            How It Works
+          </Link>
+        </div>
         <DevelopmentBuildInfo />
       </footer>
     </main>
