@@ -1,36 +1,40 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ContentProof
+
+ContentProof is a Next.js application for signing files with a Gmail‑verified
+Ed25519 signature.  Users authenticate with Google, sign a file locally and
+receive a signature that can be verified independently of the original file.
+
+The repository contains the web interface and serverless API routes that power
+the service.  Additional design documents are available in the
+[documentation](./documentation) directory.
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies and run the development server:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000> in your browser to view the app.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create a `.env.local` file and provide the following values:
 
-## Learn More
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+- `ED25519_PRIVATE_KEY` and `ED25519_PUBLIC_KEY`
+- Optional `KV_REST_API_URL` and `KV_REST_API_TOKEN` for rate limiting
 
-To learn more about Next.js, take a look at the following resources:
+## Available Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `npm run dev` – start the development server
+- `npm run build` – create a production build
+- `npm start` – run the built app
+- `npm run lint` – run ESLint
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The project is ready to deploy on [Vercel](https://vercel.com/).  Run `vercel --prod`
+or build locally with `npm run build` followed by `npm start`.
