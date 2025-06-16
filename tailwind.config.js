@@ -48,36 +48,19 @@ module.exports = {
         "light-500": "#4b5563",
         "light-600": "#374151",
       },
-      backdropBlur: {
-        xs: "2px",
-        sm: "4px",
-        md: "8px",
-        lg: "12px",
-        xl: "16px",
-      },
       keyframes: {
         float: {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-10px)" },
         },
-        glow: {
-          "0%": { filter: "drop-shadow(0 0 4px rgba(255,255,255,0.3))" },
-          "100%": { filter: "drop-shadow(0 0 8px rgba(255,255,255,0.6))" },
-        },
         "pulse-slow": {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.5" },
         },
-        "gradient-x": {
-          "0%, 100%": { backgroundPosition: "0% 50%" },
-          "50%": { backgroundPosition: "100% 50%" },
-        },
       },
       animation: {
         float: "float 6s ease-in-out infinite",
-        glow: "glow 2s ease-in-out infinite alternate",
         "pulse-slow": "pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-        "gradient-x": "gradient-x 15s ease infinite",
       },
       boxShadow: {
         glass: "0 4px 20px rgba(0,0,0,0.1)",

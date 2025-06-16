@@ -14,7 +14,7 @@ export default function AnimatedBackground({ orbs }: AnimatedBackgroundProps) {
       {orbs.map((cls, idx) => (
         <div
           key={idx}
-          className={`animate-float blur-3xl rounded-full absolute ${cls}`}
+          className={`animate-float rounded-full absolute opacity-30 ${cls}`}
         />
       ))}
     </div>

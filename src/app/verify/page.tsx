@@ -17,7 +17,11 @@ interface SignatureData {
 
 function decodeSignatureData(encoded: string): SignatureData | null {
   try {
-    if (!encoded || typeof encoded !== "string" || encoded.trim().length === 0) {
+    if (
+      !encoded ||
+      typeof encoded !== "string" ||
+      encoded.trim().length === 0
+    ) {
       return null;
     }
 
@@ -181,28 +185,24 @@ function VerifyPageContent() {
 
   return (
     <main className="relative flex flex-col items-center justify-center min-h-screen overflow-hidden p-4">
-      {/* Enhanced Animated Background */}
+      {/* Simplified Background */}
       <div className="absolute inset-0 -z-10 pointer-events-none">
-        <div className="animate-float w-72 h-72 bg-accent-blue/20 blur-3xl rounded-full absolute -top-24 -left-24" />
-        <div className="animate-float w-64 h-64 bg-accent-purple/20 blur-3xl rounded-full absolute bottom-0 right-0" />
-        <div className="animate-float w-48 h-48 bg-accent-teal/15 blur-3xl rounded-full absolute top-1/2 right-1/3" />
+        <div className="animate-float w-72 h-72 bg-blue-100 rounded-full absolute -top-24 -left-24 opacity-30" />
+        <div className="animate-float w-64 h-64 bg-purple-100 rounded-full absolute bottom-0 right-0 opacity-30" />
+        <div className="animate-float w-48 h-48 bg-teal-100 rounded-full absolute top-1/2 right-1/3 opacity-20" />
       </div>
 
       {/* Back Navigation */}
       <div className="absolute top-6 left-6">
-        <Link
-          href="/"
-          aria-label="Back to home"
-          className="btn-secondary backdrop-blur-xs"
-        >
+        <Link href="/" aria-label="Back to home" className="btn-secondary">
           ← Home
         </Link>
       </div>
 
-      {/* Centered Verification Icon with Glow Effect */}
+      {/* Centered Verification Icon */}
       <div className="mb-6">
         <div className="relative">
-          <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-accent-blue to-accent-purple glow-blue">
+          <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-2xl bg-blue-600 shadow-lg">
             <svg
               className="w-8 h-8 text-white"
               fill="none"
@@ -220,12 +220,12 @@ function VerifyPageContent() {
         </div>
       </div>
 
-      <h1 className="text-gradient-blue text-3xl md:text-5xl font-extrabold mb-8 bg-[length:200%_200%] bg-clip-text text-transparent animate-gradient-x text-center">
+      <h1 className="text-blue-600 text-3xl md:text-5xl font-extrabold mb-8 text-center">
         Verify
       </h1>
 
       {status === "error" && message && (
-        <div className="glass p-4 border border-red-400/30 bg-red-400/20 backdrop-blur-sm max-w-md mb-6 animate-in fade-in duration-500">
+        <div className="glass p-4 border border-red-400/30 bg-red-50 max-w-md mb-6 animate-in fade-in duration-500">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-red-400 flex items-center justify-center">
               <svg
@@ -285,7 +285,7 @@ function VerifyPageContent() {
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="glass p-3 border border-green-400/30 bg-green-400/10">
+              <div className="glass p-3 border border-green-400/30 bg-green-50">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-5 h-5 rounded-full bg-green-400 flex items-center justify-center">
                     <svg
@@ -340,7 +340,7 @@ function VerifyPageContent() {
                 id="fileInput"
                 type="file"
                 onChange={onFileChange}
-                className="glass w-full px-3 py-2 text-light-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-medium file:bg-gradient-to-r file:from-accent-blue file:to-accent-purple file:text-white hover:file:from-accent-purple hover:file:to-accent-teal transition-all duration-300"
+                className="glass w-full px-3 py-2 text-light-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 transition-all duration-300"
               />
             </div>
 
@@ -397,7 +397,7 @@ function VerifyPageContent() {
               {status === "success" && (
                 <div className="glass p-4 border border-green-400/30 bg-green-400/10 animate-in fade-in duration-500">
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-green-400 flex items-center justify-center glow-green">
+                    <div className="w-6 h-6 rounded-full bg-green-400 flex items-center justify-center shadow-lg">
                       <svg
                         className="w-3 h-3 text-white"
                         fill="currentColor"

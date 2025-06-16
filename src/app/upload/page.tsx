@@ -19,11 +19,7 @@ export default function UploadPage() {
 
       {/* Back Navigation */}
       <div className="absolute top-6 left-6">
-        <Link
-          href="/"
-          aria-label="Back to home"
-          className="btn-secondary backdrop-blur-xs"
-        >
+        <Link href="/" aria-label="Back to home" className="btn-secondary">
           ← Home
         </Link>
       </div>
@@ -31,7 +27,7 @@ export default function UploadPage() {
       {/* Centered Icon with Glow Effect */}
       <div className="mb-6">
         <div className="relative">
-          <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-2xl bg-gradient-to-br from-accent-blue to-accent-purple glow-blue">
+          <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-2xl bg-blue-600 shadow-lg">
             <svg
               className="w-8 h-8 text-white"
               fill="none"

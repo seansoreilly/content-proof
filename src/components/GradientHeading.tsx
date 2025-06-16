@@ -12,10 +12,6 @@ export default function GradientHeading({
   className = "",
 }: GradientHeadingProps) {
   return (
-    <h1
-      className={`text-gradient-blue font-extrabold bg-[length:200%_200%] bg-clip-text text-transparent animate-gradient-x ${className}`}
-    >
-      {children}
-    </h1>
+    <h1 className={`text-blue-600 font-extrabold ${className}`}>{children}</h1>
   );
 }
