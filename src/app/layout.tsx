@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/components/SessionProvider";
 import Script from "next/script";
 import { GA_TRACKING_ID } from "@/lib/analytics";
+import Link from "next/link";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,6 +21,16 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
+        {/* Top Right Navigation */}
+        <header className="absolute top-6 right-6 z-50 flex items-center gap-4 text-sm text-light-500">
+          <Link href="/privacy" className="hover:underline">
+            Privacy Policy
+          </Link>
+          <span className="text-light-600">|</span>
+          <Link href="/how-it-works" className="hover:underline">
+            How it works
+          </Link>
+        </header>
         {/* Google Analytics */}
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${GA_TRACKING_ID}`}

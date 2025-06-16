@@ -10,12 +10,12 @@ module.exports = {
     extend: {
       colors: {
         // Primary Off-Whites
-        "primary-50": "#ffffff",
-        "primary-100": "#fafafa",
-        "primary-200": "#f5f5f5",
-        "primary-300": "#eeeeee",
-        "primary-400": "#e0e0e0",
-        "primary-500": "#cccccc",
+        "primary-50": "#f5f5f5",
+        "primary-100": "#e8e8e8",
+        "primary-200": "#d8d8d8",
+        "primary-300": "#c8c8c8",
+        "primary-400": "#b8b8b8",
+        "primary-500": "#a8a8a8",
 
         // Accent Colours
         "accent-blue": "#2563eb",
@@ -23,14 +23,30 @@ module.exports = {
         "accent-purple": "#7c3aed",
         "accent-pink": "#d946ef",
 
+        // Light Blues
+        "light-blue-50": "#e0f2fe",
+        "light-blue-100": "#bae6fd",
+        "light-blue-200": "#7dd3fc",
+        "light-blue-300": "#38bdf8",
+        "light-blue-400": "#0ea5e9",
+        "light-blue-500": "#0284c7",
+
+        // Dark Blues
+        "dark-blue-50": "#172554",
+        "dark-blue-100": "#1e3a8a",
+        "dark-blue-200": "#1e40af",
+        "dark-blue-300": "#1d4ed8",
+        "dark-blue-400": "#2563eb",
+        "dark-blue-500": "#3b82f6",
+
         // Light Greys
-        "light-50": "#ffffff",
-        "light-100": "#f9fafb",
-        "light-200": "#f3f4f6",
-        "light-300": "#e5e7eb",
-        "light-400": "#d1d5db",
-        "light-500": "#9ca3af",
-        "light-600": "#6b7280",
+        "light-50": "#f3f4f6",
+        "light-100": "#e5e7eb",
+        "light-200": "#d1d5db",
+        "light-300": "#9ca3af",
+        "light-400": "#6b7280",
+        "light-500": "#4b5563",
+        "light-600": "#374151",
       },
       backdropBlur: {
         xs: "2px",

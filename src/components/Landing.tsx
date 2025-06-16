@@ -63,7 +63,7 @@ export default function Landing({ authSection, session }: LandingProps) {
         <GradientHeading className="text-4xl md:text-6xl mb-6">
           Content&nbsp;Proof
         </GradientHeading>
-        <p className="text-lg md:text-2xl text-light-600 mb-8 max-w-2xl mx-auto">
+        <p className="text-lg md:text-2xl text-dark-blue-400 mb-8 max-w-2xl mx-auto">
           Generate cryptographic signatures for your digital assets and verify
           authenticity in seconds.
         </p>
@@ -126,13 +126,6 @@ export default function Landing({ authSection, session }: LandingProps) {
       {/* Footer with Links & Build Info */}
       <footer className="mt-16 pt-8 border-t border-gray-200 space-y-4 text-center">
         <div className="flex justify-center gap-4 text-sm text-light-500">
-          <Link href="/privacy" className="hover:underline">
-            Privacy Policy
-          </Link>
-          <span className="text-light-600">|</span>
-          <Link href="/how-it-works" className="hover:underline">
-            How It Works
-          </Link>
         </div>
         <DevelopmentBuildInfo />
       </footer>
