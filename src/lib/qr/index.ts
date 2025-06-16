@@ -36,6 +36,16 @@ export function createVerificationUrl(encodedData: string): string {
   return `${base}/verify?data=${encodedData}`;
 }
 
+// Cache the dynamic import so subsequent calls don't re-import the module
+let qrCodePromise: Promise<typeof import("qrcode")> | null = null;
+
+async function getQrCodeModule() {
+  if (!qrCodePromise) {
+    qrCodePromise = import("qrcode");
+  }
+  return qrCodePromise;
+}
+
 /**
  * Dynamically import `qrcode` to avoid increasing the serverless bundle size
  * for pages that don't need QR capabilities. Returns a PNG data URL that can
@@ -48,7 +58,7 @@ export async function generateQrCodeDataUrl(
     errorCorrectionLevel?: "L" | "M" | "Q" | "H";
   } = {}
 ): Promise<string> {
-  const { default: QRCode } = await import("qrcode");
+  const { default: QRCode } = await getQrCodeModule();
   const { width = 256, errorCorrectionLevel = "M" } = options;
 
   return QRCode.toDataURL(text, {
