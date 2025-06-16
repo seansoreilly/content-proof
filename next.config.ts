@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { execSync } from "child_process";
+import webpack from "webpack";
 
 function getBuildInfo() {
   // Multi-environment git commit hash resolution
@@ -54,7 +55,6 @@ function getBuildInfo() {
 const nextConfig: NextConfig = {
   webpack: (config) => {
     // Define build info constants for webpack
-    const webpack = require('webpack');
     config.plugins.push(
       new webpack.DefinePlugin(getBuildInfo())
     );
