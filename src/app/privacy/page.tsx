@@ -16,7 +16,7 @@ export default async function PrivacyPage() {
   const html = marked.parse(source);
 
   return (
-    <article className="prose mx-auto px-4 py-10 dark:prose-invert">
+    <article className="prose mx-auto px-4 py-20 dark:prose-invert">
       {/* biome-ignore-next-line: react/no-danger */}
       <div dangerouslySetInnerHTML={{ __html: html }} />
     </article>
