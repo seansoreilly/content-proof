@@ -12,12 +12,11 @@ export function SignInButton() {
           process.env.DEBUG_AUTH === "true";
 
         if (isDebugAuth) {
-          console.log("Debug mode: attempting sign in");
-          // Use redirect: true for debug mode to ensure proper flow
-          signIn("debug", {
-            callbackUrl: "/",
-            redirect: true,
-          });
+          console.log("Debug mode: redirecting to debug auth");
+          // Direct redirect to debug auth endpoint
+          if (typeof window !== "undefined") {
+            window.location.href = "/api/auth/signin/debug";
+          }
           return;
         }
 
