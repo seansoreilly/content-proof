@@ -123,10 +123,12 @@ function VerifyPageContent() {
       setStatus("idle");
       setMessage(null);
 
-      // Cache public key for offline use
-      try {
-        localStorage.setItem("cached_ed25519_pub", decoded.publicKey);
-      } catch {}
+      // Cache public key for offline use (client-side only)
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("cached_ed25519_pub", decoded.publicKey);
+        } catch {}
+      }
     } else {
       setStatus("error");
       setMessage(
