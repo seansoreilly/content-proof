@@ -34,7 +34,10 @@ export default function Landing({ authSection, session }: LandingProps) {
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
-    setIsHydrated(true);
+    // Ensure we're on the client side
+    if (typeof window !== "undefined") {
+      setIsHydrated(true);
+    }
   }, []);
 
   // Only determine sign-in status after hydration to prevent mismatch
