@@ -70,7 +70,7 @@ export default function Landing({ authSection, session }: LandingProps) {
         </p>
 
         {/* Authentication Section */}
-        {authSection && <div className="mb-8">{authSection}</div>}
+        {isHydrated && authSection && <div className="mb-8">{authSection}</div>}
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           {!isHydrated ? (
