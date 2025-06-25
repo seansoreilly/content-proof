@@ -37,7 +37,8 @@ export default function Landing({ authSection, session }: LandingProps) {
     setIsHydrated(true);
   }, []);
 
-  const isSignedIn = !!session;
+  // Only determine sign-in status after hydration to prevent mismatch
+  const isSignedIn = isHydrated && !!session;
 
   return (
     <main className="relative flex flex-col items-center w-full overflow-hidden">
@@ -125,8 +126,7 @@ export default function Landing({ authSection, session }: LandingProps) {
 
       {/* Footer with Links & Build Info */}
       <footer className="mt-16 pt-8 border-t border-gray-200 space-y-4 text-center">
-        <div className="flex justify-center gap-4 text-sm text-light-500">
-        </div>
+        <div className="flex justify-center gap-4 text-sm text-light-500"></div>
         <DevelopmentBuildInfo />
       </footer>
     </main>
