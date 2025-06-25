@@ -12,25 +12,12 @@ export function SignInButton() {
           process.env.DEBUG_AUTH === "true";
 
         if (isDebugAuth) {
-          console.log("Debug mode: attempting sign in with debug provider");
-          void signIn("debug", {
-            email: "seansoreilly@gmail.com",
-            redirect: false,
-          })
-            .then((result) => {
-              console.log("Debug sign in result:", result);
-              if (result?.ok) {
-                console.log("Debug sign in successful, reloading page");
-                if (typeof window !== "undefined") {
-                  window.location.reload();
-                }
-              } else {
-                console.error("Debug sign in failed:", result?.error);
-              }
-            })
-            .catch((error) => {
-              console.error("Debug sign in error:", error);
-            });
+          console.log("Debug mode: attempting sign in");
+          // Use redirect: true for debug mode to ensure proper flow
+          signIn("debug", {
+            callbackUrl: "/",
+            redirect: true,
+          });
           return;
         }
 
