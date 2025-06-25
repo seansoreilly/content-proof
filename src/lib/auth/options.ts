@@ -19,10 +19,17 @@ export const authOptions: NextAuthOptions = {
           CredentialsProvider({
             id: "debug",
             name: "Debug",
-            credentials: {},
-            async authorize() {
+            credentials: {
+              email: { label: "Email", type: "email" },
+            },
+            async authorize(credentials) {
+              // In debug mode, always return a valid user
+              console.log(
+                "Debug auth: authorize called with credentials:",
+                credentials,
+              );
               return {
-                id: "debug-user",
+                id: "debug-user-123",
                 name: "Sean O'Reilly",
                 email: "seansoreilly@gmail.com",
               };
@@ -57,4 +64,4 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-}; 
+};
