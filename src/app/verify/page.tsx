@@ -61,6 +61,11 @@ function VerifyPageContent() {
   const [verificationTime, setVerificationTime] = useState<Date | null>(null);
   const [isClient, setIsClient] = useState(false);
 
+  // Set client-side flag to prevent hydration mismatches
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   // Decode data on first render if URL parameter is provided
   useEffect(() => {
     if (encodedData) {
