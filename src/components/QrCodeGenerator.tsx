@@ -54,11 +54,37 @@ export const QrCodeGenerator: React.FC<Props> = ({ signature, size = 256 }) => {
   const copyToClipboard = async () => {
     if (!verificationUrl) return;
     try {
-      await navigator.clipboard.writeText(verificationUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      // Try modern clipboard API first
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(verificationUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        return;
+      }
+
+      // Fallback for older browsers or when clipboard API is blocked
+      const textArea = document.createElement("textarea");
+      textArea.value = verificationUrl;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      textArea.style.top = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+
+      const successful = document.execCommand("copy");
+      document.body.removeChild(textArea);
+
+      if (successful) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } else {
+        throw new Error("Fallback copy failed");
+      }
     } catch (err) {
       console.error("Failed to copy:", err);
+      // Show a brief error message instead of failing silently
+      alert("Copy failed. Please manually select and copy the text.");
     }
   };
 
