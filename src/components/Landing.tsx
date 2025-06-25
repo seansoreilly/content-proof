@@ -74,15 +74,15 @@ export default function Landing({ authSection, session }: LandingProps) {
 
         {/* Authentication Section */}
         <div className="mb-8">
-          {!isHydrated ? (
+          {isHydrated ? (
+            authSection
+          ) : (
             <div className="flex justify-center">
               <div className="glass px-6 py-3 flex items-center gap-3">
                 <div className="w-4 h-4 border-2 border-accent-blue/30 border-t-accent-blue rounded-full animate-spin"></div>
                 <span className="text-light-600">Loading...</span>
               </div>
             </div>
-          ) : (
-            authSection
           )}
         </div>
 
