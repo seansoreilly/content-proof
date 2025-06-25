@@ -23,8 +23,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" className={inter.variable}>
+      <body className="font-sans">
         {/* Top Right Navigation */}
         <header className="absolute top-6 right-6 z-50 flex items-center gap-4 text-sm text-light-500">
           <Link href="/privacy" className="hover:underline">
