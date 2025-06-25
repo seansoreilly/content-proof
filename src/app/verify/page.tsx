@@ -315,7 +315,10 @@ function VerifyPageContent() {
                   </p>
                 </div>
                 <p className="text-light-500 text-xs">
-                  Timestamp: {new Date(sigData.timestamp).toLocaleString()}
+                  Timestamp:{" "}
+                  {isClient
+                    ? new Date(sigData.timestamp).toLocaleString()
+                    : "Loading..."}
                 </p>
               </div>
 
