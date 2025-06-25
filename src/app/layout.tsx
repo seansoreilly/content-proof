@@ -6,7 +6,11 @@ import Script from "next/script";
 import { GA_TRACKING_ID } from "@/lib/analytics";
 import Link from "next/link";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Content Proof",
