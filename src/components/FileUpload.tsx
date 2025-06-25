@@ -52,7 +52,7 @@ export default function FileUpload() {
     }
     if (file.size > MAX_FILE_SIZE_BYTES) {
       return `File larger than ${(MAX_FILE_SIZE_BYTES / (1024 * 1024)).toFixed(
-        2
+        2,
       )} MB is not allowed`;
     }
     return null;
@@ -76,7 +76,7 @@ export default function FileUpload() {
     setLoading(true);
     try {
       console.log(
-        `Starting file hash generation for: ${file.name} (${file.size} bytes)`
+        `Starting file hash generation for: ${file.name} (${file.size} bytes)`,
       );
       const hash = await sha256Hash(file);
       console.log(`Generated hash: ${hash}`);
@@ -144,11 +144,37 @@ export default function FileUpload() {
 
   const copyToClipboard = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      // Try modern clipboard API first
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        return;
+      }
+
+      // Fallback for older browsers or when clipboard API is blocked
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      textArea.style.top = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+
+      const successful = document.execCommand("copy");
+      document.body.removeChild(textArea);
+
+      if (successful) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } else {
+        throw new Error("Fallback copy failed");
+      }
     } catch (err) {
       console.error("Failed to copy:", err);
+      // Show a brief error message instead of failing silently
+      alert("Copy failed. Please manually copy the text.");
     }
   };
 
