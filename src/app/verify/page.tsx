@@ -59,6 +59,7 @@ function VerifyPageContent() {
   >("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [verificationTime, setVerificationTime] = useState<Date | null>(null);
+  const [isClient, setIsClient] = useState(false);
 
   // Decode data on first render if URL parameter is provided
   useEffect(() => {
