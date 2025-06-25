@@ -59,6 +59,12 @@ function VerifyPageContent() {
   >("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [verificationTime, setVerificationTime] = useState<Date | null>(null);
+  const [isClient, setIsClient] = useState(false);
+
+  // Set client-side flag to prevent hydration mismatches
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Decode data on first render if URL parameter is provided
   useEffect(() => {
@@ -66,10 +72,12 @@ function VerifyPageContent() {
       const decoded = decodeSignatureData(encodedData);
       if (decoded) {
         setSigData(decoded);
-        // Cache public key for offline use
-        try {
-          localStorage.setItem("cached_ed25519_pub", decoded.publicKey);
-        } catch {}
+        // Cache public key for offline use (client-side only)
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("cached_ed25519_pub", decoded.publicKey);
+          } catch {}
+        }
       } else {
         setStatus("error");
         setMessage("Invalid verification data in URL.");
@@ -79,7 +87,7 @@ function VerifyPageContent() {
 
   // Fallback to cached public key (offline)
   useEffect(() => {
-    if (sigData && !sigData.publicKey) {
+    if (sigData && !sigData.publicKey && typeof window !== "undefined") {
       try {
         const cached = localStorage.getItem("cached_ed25519_pub");
         if (cached) {
@@ -121,14 +129,16 @@ function VerifyPageContent() {
       setStatus("idle");
       setMessage(null);
 
-      // Cache public key for offline use
-      try {
-        localStorage.setItem("cached_ed25519_pub", decoded.publicKey);
-      } catch {}
+      // Cache public key for offline use (client-side only)
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("cached_ed25519_pub", decoded.publicKey);
+        } catch {}
+      }
     } else {
       setStatus("error");
       setMessage(
-        "Invalid signature format. Please ensure you've copied the complete signature data without any extra characters or line breaks."
+        "Invalid signature format. Please ensure you've copied the complete signature data without any extra characters or line breaks.",
       );
     }
   }, [manualSignature]);
@@ -166,14 +176,14 @@ function VerifyPageContent() {
       const ok = verifyEd25519Signature(
         signedMessage,
         sigData.signature,
-        sigData.publicKey
+        sigData.publicKey,
       );
       trackVerifySignature(ok ? "success" : "failure");
       setStatus(ok ? "success" : "failure");
       setMessage(
         ok
           ? "Signature verified successfully."
-          : "Signature verification failed."
+          : "Signature verification failed.",
       );
       setVerificationTime(new Date());
     } catch (err) {
@@ -305,7 +315,10 @@ function VerifyPageContent() {
                   </p>
                 </div>
                 <p className="text-light-500 text-xs">
-                  Timestamp: {new Date(sigData.timestamp).toLocaleString()}
+                  Timestamp:{" "}
+                  {isClient
+                    ? new Date(sigData.timestamp).toLocaleString()
+                    : "Loading..."}
                 </p>
               </div>
 
@@ -412,7 +425,7 @@ function VerifyPageContent() {
                     </div>
                     <p className="text-green-400 font-medium">{message}</p>
                   </div>
-                  {verificationTime && (
+                  {verificationTime && isClient && (
                     <p className="text-light-500 text-sm mt-2 flex items-center gap-1">
                       <svg
                         className="w-4 h-4"

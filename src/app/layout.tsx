@@ -6,7 +6,11 @@ import Script from "next/script";
 import { GA_TRACKING_ID } from "@/lib/analytics";
 import Link from "next/link";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Content Proof",
@@ -19,8 +23,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" className={inter.variable}>
+      <body className="font-sans">
         {/* Top Right Navigation */}
         <header className="absolute top-6 right-6 z-50 flex items-center gap-4 text-sm text-light-500">
           <Link href="/privacy" className="hover:underline">

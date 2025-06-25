@@ -13,16 +13,17 @@ export const authOptions: NextAuthOptions = {
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
-    // When debug auth is enabled, add a Credentials provider that automatically signs in
+    // When debug auth is enabled, add a simple Credentials provider
     ...(isDebugAuth
       ? [
           CredentialsProvider({
             id: "debug",
-            name: "Debug",
+            name: "Debug Authentication",
             credentials: {},
             async authorize() {
+              // Always return a valid user for debug mode
               return {
-                id: "debug-user",
+                id: "debug-user-123",
                 name: "Sean O'Reilly",
                 email: "seansoreilly@gmail.com",
               };
@@ -57,4 +58,4 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-}; 
+};
