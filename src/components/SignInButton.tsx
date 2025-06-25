@@ -12,7 +12,9 @@ export function SignInButton() {
           process.env.DEBUG_AUTH === "true";
         if (isDebugAuth) {
           void signIn("debug", { redirect: false }).then(() => {
-            window.location.reload();
+            if (typeof window !== "undefined") {
+              window.location.reload();
+            }
           });
           return;
         }
