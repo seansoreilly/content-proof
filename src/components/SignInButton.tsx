@@ -12,11 +12,25 @@ export function SignInButton() {
           process.env.DEBUG_AUTH === "true";
 
         if (isDebugAuth) {
-          void signIn("debug", { redirect: false }).then(() => {
-            if (typeof window !== "undefined") {
-              window.location.reload();
-            }
-          });
+          console.log("Debug mode: attempting sign in with debug provider");
+          void signIn("debug", {
+            email: "seansoreilly@gmail.com",
+            redirect: false,
+          })
+            .then((result) => {
+              console.log("Debug sign in result:", result);
+              if (result?.ok) {
+                console.log("Debug sign in successful, reloading page");
+                if (typeof window !== "undefined") {
+                  window.location.reload();
+                }
+              } else {
+                console.error("Debug sign in failed:", result?.error);
+              }
+            })
+            .catch((error) => {
+              console.error("Debug sign in error:", error);
+            });
           return;
         }
 
