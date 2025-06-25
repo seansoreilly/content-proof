@@ -425,7 +425,7 @@ function VerifyPageContent() {
                     </div>
                     <p className="text-green-400 font-medium">{message}</p>
                   </div>
-                  {verificationTime && (
+                  {verificationTime && isClient && (
                     <p className="text-light-500 text-sm mt-2 flex items-center gap-1">
                       <svg
                         className="w-4 h-4"
