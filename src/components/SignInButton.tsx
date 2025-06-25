@@ -10,15 +10,28 @@ export function SignInButton() {
         const isDebugAuth =
           process.env.NEXT_PUBLIC_DEBUG_AUTH === "true" ||
           process.env.DEBUG_AUTH === "true";
+        console.log("Debug auth enabled:", isDebugAuth);
+        console.log("Environment variables:", {
+          NEXT_PUBLIC_DEBUG_AUTH: process.env.NEXT_PUBLIC_DEBUG_AUTH,
+          DEBUG_AUTH: process.env.DEBUG_AUTH,
+        });
+
         if (isDebugAuth) {
-          void signIn("debug", { redirect: false }).then(() => {
-            if (typeof window !== "undefined") {
-              window.location.reload();
-            }
-          });
+          console.log("Attempting debug sign in...");
+          void signIn("debug", { redirect: false })
+            .then((result) => {
+              console.log("Debug sign in result:", result);
+              if (typeof window !== "undefined") {
+                window.location.reload();
+              }
+            })
+            .catch((error) => {
+              console.error("Debug sign in error:", error);
+            });
           return;
         }
 
+        console.log("Using Google sign in...");
         signIn("google");
       }}
       className="btn-primary flex items-center gap-3 relative overflow-hidden group transition-all duration-300 hover:scale-105"
