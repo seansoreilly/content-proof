@@ -36,8 +36,17 @@ export default function Landing({ authSection, session }: LandingProps) {
   useEffect(() => {
     // Ensure we're on the client side
     if (typeof window !== "undefined") {
+      console.log("Setting isHydrated to true");
       setIsHydrated(true);
     }
+
+    // Fallback timeout in case hydration detection fails
+    const timeout = setTimeout(() => {
+      console.log("Fallback: forcing isHydrated to true after timeout");
+      setIsHydrated(true);
+    }, 2000);
+
+    return () => clearTimeout(timeout);
   }, []);
 
   // Only determine sign-in status after hydration to prevent mismatch
