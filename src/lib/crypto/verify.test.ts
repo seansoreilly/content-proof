@@ -29,7 +29,7 @@ describe("signature verification", () => {
     const { signFileHash } = await import("@/lib/crypto/ed25519");
     const record = signFileHash(fileHex, email, 1_760_000_000_000);
     const result = verifyRecord(record, fileHex, publish(pair.publicKeyBase64));
-    expect(result).toEqual({ ok: true, keyId: record.k });
+    expect(result).toEqual({ ok: true, keyId: record.k, userSigned: false });
   });
 
   it("rejects a forged record whose key is not published, even though it self-verifies", () => {

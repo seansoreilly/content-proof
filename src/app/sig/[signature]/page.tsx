@@ -50,7 +50,11 @@ export default async function RecordPage({
           <span className="text-light-500">File SHA-256 (base64url):</span> <code className="text-xs break-all">{record.h}</code>
         </p>
         <p>
-          <span className="text-light-500">Key id:</span> <code className="text-xs">{record.k}</code>
+          <span className="text-light-500">Service key id:</span> <code className="text-xs">{record.k}</code>
+        </p>
+        <p>
+          <span className="text-light-500">Account holder&apos;s key:</span>{" "}
+          {record.u ? <code className="text-xs break-all">{record.u}</code> : "none (service attestation only)"}
         </p>
         <p>
           <span className="text-light-500">Transparency log:</span>{" "}

@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { useSession } from "next-auth/react";
 import { QrCodeGenerator } from "@/components/QrCodeGenerator";
 import { MAX_FILE_SIZE_BYTES, sha256Hash } from "@/lib/hash";
-import { parseRecordObject, type SignatureRecord } from "@/lib/record";
+import { buildSignedMessage, parseRecordObject, type SignatureRecord } from "@/lib/record";
+import { getOrCreateUserKey, type UserSigningKey } from "@/lib/user-keys";
 import { trackSignFile } from "@/lib/analytics";
 
 interface HashResult {
@@ -27,8 +29,25 @@ export default function FileUpload() {
   const [stage, setStage] = useState<"idle" | "hashing" | "signing">("idle");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [record, setRecord] = useState<SignatureRecord | null>(null);
+  const [userKey, setUserKey] = useState<UserSigningKey | null | "unsupported">(null);
+  const { data: session } = useSession();
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // This browser's own signing key (created on first use, never leaves the device).
+  useEffect(() => {
+    let cancelled = false;
+    getOrCreateUserKey()
+      .then((key) => {
+        if (!cancelled) setUserKey(key);
+      })
+      .catch(() => {
+        if (!cancelled) setUserKey("unsupported");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const resetState = () => {
     setHashResult(null);
@@ -71,10 +90,20 @@ export default function FileUpload() {
       setHashResult({ fileName: file.name, fileSize: file.size, hash });
 
       setStage("signing");
+      // Sign with this browser's key first so the service can countersign a
+      // statement the account holder actually made. Falls back to a
+      // service-only record when the browser cannot hold a key.
+      let payload: Record<string, unknown> = { fileHash: hash };
+      const email = session?.user?.email;
+      if (userKey && userKey !== "unsupported" && email) {
+        const timestamp = Date.now();
+        const userSignature = await userKey.sign(buildSignedMessage(hash, email, timestamp));
+        payload = { fileHash: hash, timestamp, userPublicKey: userKey.publicKey, userSignature };
+      }
       const res = await fetch("/api/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileHash: hash }),
+        body: JSON.stringify(payload),
       });
 
       if (res.status === 401) throw new Error("Please sign in before signing a file.");
@@ -236,6 +265,27 @@ export default function FileUpload() {
           <QrCodeGenerator record={record} />
         </div>
       )}
+
+      <div className="glass mt-4 p-4 text-xs text-light-500 space-y-1" data-testid="user-key">
+        {userKey === "unsupported" ? (
+          <p>
+            This browser cannot hold a signing key, so records are service attestations only. A current
+            Chrome, Firefox or Safari adds your own signature.
+          </p>
+        ) : userKey ? (
+          <>
+            <p className="text-light-600 font-medium">Your signing key (this browser)</p>
+            <code className="block break-all">{userKey.publicKey}</code>
+            <p>
+              Records you create here carry a signature made with this key. It never leaves this device.
+              Publish this key where people can find you so they can tie your records to you, not just to
+              your account.
+            </p>
+          </>
+        ) : (
+          <p>Preparing your signing key…</p>
+        )}
+      </div>
     </div>
   );
 }

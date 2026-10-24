@@ -6,36 +6,74 @@ import { bytesToHex, fromBase64Url, hexToBytes, toBase64Url } from "@/lib/base64
  * the QR stays scannable, and every field is URL-safe so the record can live
  * in a URL fragment without further encoding.
  *
- * Wire format (version 2):  `2~<k>~<h>~<e>~<t>~<s>`
+ * Wire format, version 2 (service attestation only):
+ *   `2~<k>~<h>~<e>~<t>~<s>`
  *
- *  - k  key id: first 16 chars of base64url(SHA-256(SPKI DER public key))
- *  - h  base64url SHA-256 of the file (43 chars)
- *  - e  signer email, percent-encoded (with `~` as %7E)
- *  - t  milliseconds since the Unix epoch
- *  - s  base64url Ed25519 signature (86 chars)
+ * Wire format, version 3 (account holder's own key plus service countersign):
+ *   `3~<k>~<h>~<e>~<t>~<s>~<u>~<us>`
  *
- * The signed message is `<hash hex>:<email>:<t>` (UTF-8). That layout predates
- * version 2 and must never change, or every existing signature breaks.
+ *  - k   service key id: first 16 chars of base64url(SHA-256(SPKI DER public key))
+ *  - h   base64url SHA-256 of the file (43 chars)
+ *  - e   signer email, percent-encoded (with `~` as %7E)
+ *  - t   milliseconds since the Unix epoch
+ *  - s   base64url Ed25519 signature by the service (86 chars)
+ *  - u   base64url raw 32-byte Ed25519 public key held by the account holder (43 chars)
+ *  - us  base64url Ed25519 signature by that key (86 chars)
+ *
+ * Messages that get signed (UTF-8):
+ *  - the account holder's key signs        `<hash hex>:<email>:<t>`
+ *  - the service signs, for version 2,     `<hash hex>:<email>:<t>`
+ *  - the service signs, for version 3,     `<hash hex>:<email>:<t>:<u>:<us>`
+ *    so the service attests to the user's key and signature as well.
+ *
+ * The version 2 layout predates this and must never change, or every existing
+ * signature breaks.
  */
 export const RECORD_VERSION = 2 as const;
+export const RECORD_VERSION_USER_SIGNED = 3 as const;
+
+export type RecordVersion = typeof RECORD_VERSION | typeof RECORD_VERSION_USER_SIGNED;
 
 export interface SignatureRecord {
-  v: typeof RECORD_VERSION;
+  v: RecordVersion;
   k: string;
   h: string;
   e: string;
   t: number;
   s: string;
+  /** Present when v === 3. */
+  u?: string;
+  /** Present when v === 3. */
+  us?: string;
 }
 
 const SEPARATOR = "~";
 const KEY_ID_RE = /^[A-Za-z0-9_-]{16}$/;
-const HASH_B64_RE = /^[A-Za-z0-9_-]{43}$/;
+const B64_32_RE = /^[A-Za-z0-9_-]{43}$/;
 const HASH_HEX_RE = /^[0-9a-f]{64}$/i;
 const SIGNATURE_RE = /^[A-Za-z0-9_-]{86}$/;
 
 export function buildSignedMessage(hashHex: string, email: string, timestamp: number): string {
   return `${hashHex}:${email}:${timestamp}`;
+}
+
+/** What the service signs for a version 3 record. */
+export function buildServiceMessageV3(
+  hashHex: string,
+  email: string,
+  timestamp: number,
+  userPublicKey: string,
+  userSignature: string
+): string {
+  return `${buildSignedMessage(hashHex, email, timestamp)}:${userPublicKey}:${userSignature}`;
+}
+
+/** The message the service signed for a given record, whatever its version. */
+export function serviceMessageFor(record: SignatureRecord, hashHex: string): string {
+  if (record.v === RECORD_VERSION_USER_SIGNED && record.u && record.us) {
+    return buildServiceMessageV3(hashHex, record.e, record.t, record.u, record.us);
+  }
+  return buildSignedMessage(hashHex, record.e, record.t);
 }
 
 export function hashHexToB64url(hashHex: string): string {
@@ -44,10 +82,24 @@ export function hashHexToB64url(hashHex: string): string {
 }
 
 export function hashB64urlToHex(hashB64url: string): string {
-  if (!HASH_B64_RE.test(hashB64url)) throw new Error("Invalid SHA-256 base64url digest");
+  if (!B64_32_RE.test(hashB64url)) throw new Error("Invalid SHA-256 base64url digest");
   const bytes = fromBase64Url(hashB64url);
   if (bytes.length !== 32) throw new Error("Invalid SHA-256 digest length");
   return bytesToHex(bytes);
+}
+
+/** True when the string is a well-formed base64url raw Ed25519 public key. */
+export function isRawPublicKey(value: unknown): value is string {
+  if (typeof value !== "string" || !B64_32_RE.test(value)) return false;
+  try {
+    return fromBase64Url(value).length === 32;
+  } catch {
+    return false;
+  }
+}
+
+export function isSignatureString(value: unknown): value is string {
+  return typeof value === "string" && SIGNATURE_RE.test(value);
 }
 
 function encodeEmail(email: string): string {
@@ -55,14 +107,16 @@ function encodeEmail(email: string): string {
 }
 
 export function encodeRecord(record: SignatureRecord): string {
-  return [
+  const fields = [
     String(record.v),
     record.k,
     record.h,
     encodeEmail(record.e),
     String(record.t),
     record.s,
-  ].join(SEPARATOR);
+  ];
+  if (record.v === RECORD_VERSION_USER_SIGNED) fields.push(record.u ?? "", record.us ?? "");
+  return fields.join(SEPARATOR);
 }
 
 /**
@@ -71,18 +125,25 @@ export function encodeRecord(record: SignatureRecord): string {
 export function parseRecordObject(input: unknown): SignatureRecord | null {
   if (!input || typeof input !== "object") return null;
   const o = input as Record<string, unknown>;
-  const v = o.v === RECORD_VERSION || o.v === String(RECORD_VERSION) ? RECORD_VERSION : null;
+  const vNum = typeof o.v === "number" ? o.v : typeof o.v === "string" ? Number(o.v) : NaN;
+  const v: RecordVersion | null =
+    vNum === RECORD_VERSION ? RECORD_VERSION : vNum === RECORD_VERSION_USER_SIGNED ? RECORD_VERSION_USER_SIGNED : null;
   const t = typeof o.t === "number" ? o.t : typeof o.t === "string" ? Number(o.t) : NaN;
   if (
     v === null ||
     typeof o.k !== "string" || !KEY_ID_RE.test(o.k) ||
-    typeof o.h !== "string" || !HASH_B64_RE.test(o.h) ||
+    typeof o.h !== "string" || !B64_32_RE.test(o.h) ||
     typeof o.e !== "string" || !o.e.includes("@") || o.e.length > 320 ||
     !Number.isInteger(t) || t <= 0 ||
-    typeof o.s !== "string" || !SIGNATURE_RE.test(o.s)
+    !isSignatureString(o.s)
   ) {
     return null;
   }
+  if (v === RECORD_VERSION_USER_SIGNED) {
+    if (!isRawPublicKey(o.u) || !isSignatureString(o.us)) return null;
+    return { v, k: o.k, h: o.h, e: o.e, t, s: o.s, u: o.u, us: o.us };
+  }
+  if (o.u !== undefined || o.us !== undefined) return null;
   return { v, k: o.k, h: o.h, e: o.e, t, s: o.s };
 }
 
@@ -90,15 +151,16 @@ export function parseRecordObject(input: unknown): SignatureRecord | null {
 export function decodeRecord(payload: string): SignatureRecord | null {
   if (typeof payload !== "string" || payload.length === 0) return null;
   const parts = payload.trim().split(SEPARATOR);
-  if (parts.length !== 6) return null;
-  const [v, k, h, encodedEmail, t, s] = parts;
+  if (parts.length !== 6 && parts.length !== 8) return null;
+  const [v, k, h, encodedEmail, t, s, u, us] = parts;
+  if ((parts.length === 8) !== (v === String(RECORD_VERSION_USER_SIGNED))) return null;
   let e: string;
   try {
     e = decodeURIComponent(encodedEmail);
   } catch {
     return null;
   }
-  return parseRecordObject({ v, k, h, e, t, s });
+  return parseRecordObject(parts.length === 8 ? { v, k, h, e, t, s, u, us } : { v, k, h, e, t, s });
 }
 
 const FRAGMENT_PARAM = "P";

@@ -68,6 +68,36 @@ Key document:
 The in-app verifier does this in the browser and caches the key set for offline
 use. It never trusts a key carried inside the QR code.
 
+### Version 3: the account holder's own signature
+
+When the browser can hold a key, records are version 3 and carry two
+signatures:
+
+```
+3~<kid>~<hash>~<email>~<timestamp>~<signature>~<ukey>~<usig>
+```
+
+| Field | Meaning |
+|-------|---------|
+| `ukey` | base64url raw 32-byte Ed25519 public key held by the account holder (43 chars) |
+| `usig` | base64url Ed25519 signature by that key over `<hash_hex>:<email>:<timestamp>` (86 chars) |
+| `signature` | the service's countersignature, now over `<hash_hex>:<email>:<timestamp>:<ukey>:<usig>` |
+
+The key is generated in the browser with WebCrypto as a non-extractable
+Ed25519 key and stored in IndexedDB. The private half never leaves the device
+and the service never sees it: the browser signs, the service verifies that
+signature, then countersigns. A verifier checks both. A version 3 record
+therefore proves that whoever held `ukey` approved exactly this statement,
+not only that the service says so.
+
+What it does not prove on its own is that `ukey` belongs to the person behind
+the email: the service asserts that binding at signing time (the key was
+presented in a session logged in as that account). The upload page shows your
+key so you can publish it somewhere you control, which gives verifiers an
+independent binding. Each browser has its own key; records name the key that
+signed them. Browsers without WebCrypto Ed25519 fall back to version 2
+(service attestation only) and the verifier says so.
+
 Optional endpoints:
 
 - `GET /api/sig/<signature>` returns the stored record `{v,h,e,t,s,k}` when

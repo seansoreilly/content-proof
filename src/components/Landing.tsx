@@ -10,7 +10,7 @@ import { Session } from "next-auth";
 const features = [
   {
     title: "Signed attestations",
-    desc: "ContentProof signs a record of your file's fingerprint, your Google account and the time.",
+    desc: "Your browser signs a record of your file's fingerprint, your Google account and the time with a key only you hold; ContentProof countersigns it.",
     icon: "🔐",
   },
   {

@@ -57,7 +57,7 @@ describe.skipIf(!base)("live server flow", () => {
     expect(keysRes.headers.get("access-control-allow-origin")).toBe("*");
     const keys = parsePublicKeysJson(await keysRes.json());
     expect(keys).not.toBeNull();
-    expect(verifyRecord(record!, fileHex, keys!)).toEqual({ ok: true, keyId: record!.k });
+    expect(verifyRecord(record!, fileHex, keys!)).toEqual({ ok: true, keyId: record!.k, userSigned: false });
 
     // The QR payload round-trips
     expect(decodeRecord(encodeRecord(record!))).toEqual(record);
@@ -97,6 +97,22 @@ describe.skipIf(!base)("live server flow", () => {
     expect((await fetch(`${base}/verify`)).status).toBe(200);
     expect((await fetch(`${base}/sig/${record!.s}`)).status).toBe(200);
     expect((await fetch(`${base}/sig/${"A".repeat(86)}`)).status).toBe(404);
+
+    // 7b. Version 3: a browser-held key signs, the service countersigns
+    const { generateUserKeyPair, toUserSigningKey } = await import("@/lib/user-keys");
+    const userKey = await toUserSigningKey(await generateUserKeyPair());
+    const t3 = Date.now();
+    const email3 = process.env.E2E_EXPECT_EMAIL ?? "e2e@example.com";
+    const userSignature = await userKey.sign(buildSignedMessage(fileHex, email3, t3));
+    const v3Res = await fetch(`${base}/api/sign`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ fileHash: fileHex, timestamp: t3, userPublicKey: userKey.publicKey, userSignature }),
+    });
+    expect(v3Res.status).toBe(200);
+    const v3 = parseRecordObject(((await v3Res.json()) as { record: unknown }).record);
+    expect(v3).toMatchObject({ v: 3, u: userKey.publicKey });
+    expect(verifyRecord(v3!, fileHex, keys!)).toMatchObject({ ok: true, userSigned: true, userKey: userKey.publicKey });
 
     // 8. Transparency log: signed head verifies, inclusion proof verifies
     const head = (await (await fetch(`${base}/api/log/head`)).json()) as SignedLogHead;

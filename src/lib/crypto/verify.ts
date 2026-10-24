@@ -6,19 +6,34 @@ import {
   keyIdFromSpkiBase64,
   type PublicKeysJson,
 } from "@/lib/keyset";
-import { buildSignedMessage, hashB64urlToHex, type SignatureRecord } from "@/lib/record";
+import {
+  RECORD_VERSION_USER_SIGNED,
+  buildSignedMessage,
+  hashB64urlToHex,
+  serviceMessageFor,
+  type SignatureRecord,
+} from "@/lib/record";
 
 /**
  * Environment-agnostic verification. Runs identically in the browser (verify
- * page) and on the server (/api/verify). The set of acceptable public keys is
+ * page) and on the server (/api/verify). The set of acceptable service keys is
  * always passed in explicitly and must come from the service's published
  * well-known document, never from the record being verified.
  */
-export type VerificationFailure = "unknown-key" | "hash-mismatch" | "bad-signature" | "malformed";
+export type VerificationFailure =
+  | "unknown-key"
+  | "hash-mismatch"
+  | "bad-signature"
+  | "bad-user-signature"
+  | "malformed";
 
 export interface VerificationResult {
   ok: boolean;
   keyId?: string;
+  /** True when the record also carries a valid signature by the account holder's own key. */
+  userSigned?: boolean;
+  /** The account holder's raw public key (base64url) when userSigned. */
+  userKey?: string;
   reason?: VerificationFailure;
 }
 
@@ -29,25 +44,48 @@ function spkiBase64ToRawKey(spkiBase64: string): Uint8Array {
   return der.slice(-32);
 }
 
+function verifyDetached(message: string | Uint8Array, signatureBase64Url: string, rawKey: Uint8Array): boolean {
+  try {
+    const msg = typeof message === "string" ? utf8ToBytes(message) : message;
+    const signature = fromBase64Url(signatureBase64Url);
+    if (signature.length !== 64 || rawKey.length !== 32) return false;
+    return nacl.sign.detached.verify(msg, signature, rawKey);
+  } catch {
+    return false;
+  }
+}
+
+/** Verify against a service key given as base64 SPKI DER. */
 export function verifyEd25519(
   message: string | Uint8Array,
   signatureBase64Url: string,
   publicKeySpkiBase64: string
 ): boolean {
   try {
-    const msg = typeof message === "string" ? utf8ToBytes(message) : message;
-    const signature = fromBase64Url(signatureBase64Url);
-    if (signature.length !== 64) return false;
-    return nacl.sign.detached.verify(msg, signature, spkiBase64ToRawKey(publicKeySpkiBase64));
+    return verifyDetached(message, signatureBase64Url, spkiBase64ToRawKey(publicKeySpkiBase64));
+  } catch {
+    return false;
+  }
+}
+
+/** Verify against a raw 32-byte Ed25519 public key given as base64url (account holder keys). */
+export function verifyEd25519Raw(
+  message: string | Uint8Array,
+  signatureBase64Url: string,
+  rawPublicKeyBase64Url: string
+): boolean {
+  try {
+    return verifyDetached(message, signatureBase64Url, fromBase64Url(rawPublicKeyBase64Url));
   } catch {
     return false;
   }
 }
 
 /**
- * Verify a version-2 record against the file's SHA-256 (hex) and the published
- * key set. Order matters for the error reported: an unpublished key is the most
- * important thing to tell the user, then a changed file, then a bad signature.
+ * Verify a record against the file's SHA-256 (hex) and the published key set.
+ * Order matters for the error reported: an unpublished key is the most
+ * important thing to tell the user, then a changed file, then a bad service
+ * signature, then a bad account-holder signature.
  */
 export function verifyRecord(
   record: SignatureRecord,
@@ -69,10 +107,20 @@ export function verifyRecord(
     return { ok: false, reason: "hash-mismatch" };
   }
 
-  const message = buildSignedMessage(recordHashHex, record.e, record.t);
-  return verifyEd25519(message, record.s, entry.publicKey)
-    ? { ok: true, keyId: record.k }
-    : { ok: false, reason: "bad-signature" };
+  if (!verifyEd25519(serviceMessageFor(record, recordHashHex), record.s, entry.publicKey)) {
+    return { ok: false, reason: "bad-signature" };
+  }
+
+  if (record.v === RECORD_VERSION_USER_SIGNED) {
+    if (!record.u || !record.us) return { ok: false, reason: "malformed" };
+    const userMessage = buildSignedMessage(recordHashHex, record.e, record.t);
+    if (!verifyEd25519Raw(userMessage, record.us, record.u)) {
+      return { ok: false, reason: "bad-user-signature" };
+    }
+    return { ok: true, keyId: record.k, userSigned: true, userKey: record.u };
+  }
+
+  return { ok: true, keyId: record.k, userSigned: false };
 }
 
 /** Shape of the pre-version-2 payload that older QR codes still carry. */
@@ -98,6 +146,6 @@ export function verifyLegacyPayload(
   }
   const message = buildSignedMessage(fileHashHex.toLowerCase(), email, payload.timestamp);
   return verifyEd25519(message, payload.signature, payload.publicKey)
-    ? { ok: true, keyId: keyIdFromSpkiBase64(payload.publicKey) }
+    ? { ok: true, keyId: keyIdFromSpkiBase64(payload.publicKey), userSigned: false }
     : { ok: false, reason: "bad-signature" };
 }

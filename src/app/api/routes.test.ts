@@ -94,6 +94,47 @@ describe("API routes", () => {
     expect(records.get(body.record.s)).toEqual(body.record);
   });
 
+  it("countersigns a browser-held key's signature into a v3 record and verifies it", async () => {
+    const { sign, verify } = await routes();
+    const { generateUserKeyPair, toUserSigningKey } = await import("@/lib/user-keys");
+    const key = await toUserSigningKey(await generateUserKeyPair());
+    const timestamp = Date.now();
+    const userSignature = await key.sign(buildSignedMessage(fileHex, "signer@gmail.com", timestamp));
+
+    const res = await sign.POST(
+      jsonRequest("http://t/api/sign", { fileHash: fileHex, timestamp, userPublicKey: key.publicKey, userSignature })
+    );
+    expect(res.status).toBe(200);
+    const { record } = (await res.json()) as { record: SignatureRecord };
+    expect(record).toMatchObject({ v: 3, u: key.publicKey, us: userSignature, t: timestamp });
+
+    const verified = await (await verify.POST(jsonRequest("http://t/api/verify", record))).json();
+    expect(verified).toMatchObject({ valid: true, userSigned: true, userKey: key.publicKey });
+
+    // wrong email in the user signature → service refuses to countersign
+    const wrong = await key.sign(buildSignedMessage(fileHex, "other@gmail.com", timestamp));
+    const bad = await sign.POST(
+      jsonRequest("http://t/api/sign", { fileHash: fileHex, timestamp, userPublicKey: key.publicKey, userSignature: wrong })
+    );
+    expect(bad.status).toBe(400);
+
+    // timestamp outside the skew window
+    const stale = await sign.POST(
+      jsonRequest("http://t/api/sign", {
+        fileHash: fileHex,
+        timestamp: timestamp - 10 * 60 * 1000,
+        userPublicKey: key.publicKey,
+        userSignature,
+      })
+    );
+    expect(stale.status).toBe(400);
+
+    // user fields present but malformed
+    expect(
+      (await sign.POST(jsonRequest("http://t/api/sign", { fileHash: fileHex, timestamp, userPublicKey: "x", userSignature }))).status
+    ).toBe(400);
+  });
+
   it("rejects unauthenticated and malformed signing requests", async () => {
     const { sign } = await routes();
     session.user = null;

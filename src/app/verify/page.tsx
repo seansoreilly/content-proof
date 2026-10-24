@@ -60,6 +60,8 @@ const FAILURE_MESSAGES: Record<VerificationFailure, string> = {
     "The file you selected is not the file that was attested. It may have been modified, re-saved or converted.",
   "bad-signature":
     "The signature does not match the record. The record was altered after it was issued.",
+  "bad-user-signature":
+    "The service countersignature is valid but the account holder's own signature does not verify. Treat the record as invalid.",
   malformed: "The record is malformed and cannot be checked.",
 };
 
@@ -354,10 +356,18 @@ function VerifyPageContent() {
                     ).toLocaleString()}
                     .
                   </p>
-                  <p className="text-light-500 text-xs">
-                    Signed with published key <code>{result.keyId}</code>. This is an attestation by the
-                    service, not a signature made with a key the account holder controls.
-                  </p>
+                  {result.userSigned ? (
+                    <p className="text-light-500 text-xs" data-testid="user-signature">
+                      Also signed by the account holder&apos;s own key{" "}
+                      <code className="break-all">{result.userKey}</code>, which the service never holds.
+                      Service countersignature by published key <code>{result.keyId}</code>.
+                    </p>
+                  ) : (
+                    <p className="text-light-500 text-xs" data-testid="user-signature">
+                      Signed with published key <code>{result.keyId}</code>. This is an attestation by the
+                      service only; the record carries no signature from a key the account holder controls.
+                    </p>
+                  )}
                   {logStatus && (
                     <p className="text-light-500 text-xs" data-testid="log-status">
                       {logStatus.kind === "checking" && "Checking the transparency log…"}

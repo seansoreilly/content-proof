@@ -37,7 +37,13 @@ export async function POST(request: Request): Promise<Response> {
 
     const result = verifyRecord(record, hashB64urlToHex(record.h), buildPublicKeysJson());
     return NextResponse.json(
-      { valid: result.ok, keyId: result.keyId ?? null, reason: result.reason ?? null },
+      {
+        valid: result.ok,
+        keyId: result.keyId ?? null,
+        userSigned: result.userSigned ?? false,
+        userKey: result.userKey ?? null,
+        reason: result.reason ?? null,
+      },
       { status: 200 }
     );
   } catch (error) {

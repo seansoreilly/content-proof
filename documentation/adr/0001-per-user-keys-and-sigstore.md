@@ -1,6 +1,7 @@
 # ADR 0001: Per-user signing keys and Sigstore
 
-Status: Proposed, awaiting product decision. Date: 2026-10-24.
+Status: Accepted (option E, browser-held keys with service countersignature)
+on 2026-10-24. Options C and D remain open as future upgrades.
 
 ## Context
 
@@ -72,17 +73,49 @@ with the ephemeral key, and record the signature in Rekor's public log.
   it changes who the user is trusting (Sigstore's public-good instance), what
   the QR contains, and the offline story. A product decision.
 
+### E. Browser-held WebCrypto key with service countersignature (chosen)
+
+Generate a non-extractable Ed25519 key with WebCrypto in the browser, keep it
+in IndexedDB, sign `<hash>:<email>:<timestamp>` with it, and have the service
+verify that signature and countersign a statement that includes the user's
+key and signature (record version 3).
+
+- Proves: the holder of the key in the record approved exactly this
+  statement. The service cannot produce such a record for an existing key
+  it does not hold.
+- Does not prove: that the key belongs to the person behind the email. The
+  service asserts that binding when it countersigns (the key was presented in
+  a session for that account). A dishonest service could mint a key and claim
+  it is the user's. Mitigations: the upload page shows the key so the user can
+  publish it independently; every record and key use is in the transparency
+  log, so a key appearing out of nowhere is auditable.
+- Requires: WebCrypto Ed25519 (current Chrome, Firefox, Safari; Node 18+ for
+  tests). No authenticator prompts, no external service, verification stays
+  offline. Loss of the browser profile loses the key; the next visit makes a
+  new one, which is acceptable because records name the key that signed them.
+- Cost: implemented in this change. Payload grows by about 130 characters; the
+  QR stays within version 15 at error-correction level M.
+
 ## Decision
 
-Keep A, with the transparency log, until the owner chooses between C and D.
-Do not implement B. Whichever of C or D is chosen, keep the current record
-format as the "service attestation" layer so existing QR codes stay valid and
-the new proof is additive.
+Implement E now. It delivers per-record non-repudiation by a key the service
+never holds, with no change to who runs the infrastructure and no new prompts
+for the user. Keep version 2 as the fallback for browsers without WebCrypto
+Ed25519 so every browser can still sign, and keep the verifier honest about
+which it is looking at.
+
+Do not implement B. Revisit C (passkeys) if users want keys that roam across
+devices with platform-backed recovery, and D (Sigstore) if an external,
+third-party identity binding becomes a requirement. Both are additive: the
+version 3 record stays the service-attestation layer.
 
 ## Consequences
 
-- Copy and docs state the attestation model plainly (done).
+- Copy and docs state the attestation model plainly, and distinguish version 2
+  (service only) from version 3 (account holder's key plus service) (done).
 - The transparency log gives auditors a way to hold the service to its own
-  history (done).
-- Per-user non-repudiation remains a roadmap item with two viable designs,
-  each needing a decision on recovery UX (C) or external dependency (D).
+  history, including which keys it bound to which accounts (done).
+- The verifier reports whether a record carries the account holder's
+  signature (done).
+- Device-roaming keys and external identity binding remain roadmap items
+  with two viable designs (C, D).
