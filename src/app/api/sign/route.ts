@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
 import { signFileHash } from "@/lib/crypto/ed25519";
 import { createRateLimiter, rateLimitedResponse } from "@/lib/rate-limit";
-import { getCounterStore, getRecordStore } from "@/lib/redis";
+import { getCounterStore, getLogStore, getRecordStore } from "@/lib/redis";
 
 const HASH_HEX_RE = /^[0-9a-fA-F]{64}$/;
 
@@ -45,14 +45,16 @@ export async function POST(request: Request): Promise<Response> {
 
     const record = signFileHash(fileHash, email);
 
+    let logIndex: number | null = null;
     try {
       await getRecordStore().put(record);
+      logIndex = await getLogStore().append(record);
     } catch (storeError) {
       // Storage is optional; the record is self-contained.
       console.warn("[sign] record store unavailable", storeError);
     }
 
-    return NextResponse.json({ record }, { status: 200 });
+    return NextResponse.json({ record, logIndex }, { status: 200 });
   } catch (error) {
     console.error("[sign] failed", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

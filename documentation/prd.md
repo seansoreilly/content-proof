@@ -638,3 +638,6 @@ Deltas between this PRD and the implementation.
 - **Well-known keys.** Verification fetches `/.well-known/public-keys.json` (`current` plus `keys[kid]` with SPKI DER public keys), cached in the browser for offline use. Keys carried in QR codes are never trusted.
 - **Optional services.** `GET /api/sig/<signature>` returns a stored record and `POST /api/verify` verifies server-side. Both are rate limited. Storage and shared rate limiting use Upstash/KV when configured, otherwise in-memory.
 - **Tests and CI added.** Unit tests plus a GitHub Actions workflow running typecheck, lint, test and build.
+- **Transparency log.** Every issued record is appended to an append-only log with an RFC 6962 Merkle tree. `GET /api/log/head` returns a tree head signed by the service key, `GET /api/log/proof` returns inclusion proofs, `GET /api/log/entries` pages the log for mirroring. The verify page checks inclusion after a successful verification, and a scheduled workflow archives tree heads to the repository. `/sig/<signature>` is a public page for one record.
+- **QR image decoding.** The verify page accepts a picture of a QR code and decodes it in the browser.
+- **Per-user keys and Sigstore.** Not implemented; see `documentation/adr/0001-per-user-keys-and-sigstore.md` for the options and the decision pending on the owner.

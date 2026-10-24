@@ -12,11 +12,46 @@ import {
   type VerificationResult,
 } from "@/lib/crypto/verify";
 import { loadPublicKeys, type PublicKeysLoad } from "@/lib/keyset-client";
-import { extractPayloadFromUrl } from "@/lib/record";
+import { verifyLogHead, verifyRecordInclusion, type InclusionProofResponse, type SignedLogHead } from "@/lib/log-verify";
+import { decodeQrFile } from "@/lib/qr-decode";
+import { extractPayloadFromUrl, type SignatureRecord } from "@/lib/record";
 import { parseVerificationInput, type LoadedInput as Loaded } from "@/lib/verify-input";
 import { trackVerifySignature } from "@/lib/analytics";
 
 const parseInput = parseVerificationInput;
+
+type LogStatus =
+  | { kind: "checking" }
+  | { kind: "included"; index: number; size: number }
+  | { kind: "absent" }
+  | { kind: "invalid" }
+  | { kind: "unavailable" };
+
+/**
+ * Ask the service for an inclusion proof and a signed tree head, then check
+ * both locally. A record can be perfectly valid and still absent from the log
+ * (storage not configured), which is reported as such rather than as failure.
+ */
+async function checkLogInclusion(record: SignatureRecord, keys: PublicKeysLoad["keys"]): Promise<LogStatus> {
+  try {
+    const proofRes = await fetch(`/api/log/proof?signature=${encodeURIComponent(record.s)}`, { cache: "no-store" });
+    if (proofRes.status === 404) return { kind: "absent" };
+    if (!proofRes.ok) return { kind: "unavailable" };
+    const proof = (await proofRes.json()) as InclusionProofResponse;
+    if (!verifyRecordInclusion(record, proof)) return { kind: "invalid" };
+
+    const headRes = await fetch("/api/log/head", { cache: "no-store" });
+    if (!headRes.ok) return { kind: "unavailable" };
+    const head = (await headRes.json()) as SignedLogHead;
+    // The head may be newer than the proof's tree; only trust a head that is signed
+    // by a published key. A root mismatch with a larger tree is normal growth.
+    if (!verifyLogHead(head, keys)) return { kind: "invalid" };
+    if (head.size === proof.size && head.root !== proof.root) return { kind: "invalid" };
+    return { kind: "included", index: proof.index, size: proof.size };
+  } catch {
+    return { kind: "unavailable" };
+  }
+}
 
 const FAILURE_MESSAGES: Record<VerificationFailure, string> = {
   "unknown-key":
@@ -42,6 +77,8 @@ function VerifyPageContent() {
   const [status, setStatus] = useState<"idle" | "verifying" | "done">("idle");
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
+  const [logStatus, setLogStatus] = useState<LogStatus | null>(null);
+  const [decodingQr, setDecodingQr] = useState(false);
 
   // The record rides in the URL fragment, which Next's search params cannot see.
   useEffect(() => {
@@ -92,7 +129,32 @@ function VerifyPageContent() {
     setResult(null);
     setStatus("idle");
     setInputError(null);
+    setLogStatus(null);
   }, []);
+
+  const onQrImageChange: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    const image = e.target.files?.[0];
+    e.target.value = "";
+    if (!image) return;
+    setDecodingQr(true);
+    setInputError(null);
+    try {
+      const text = await decodeQrFile(image);
+      const parsed = text ? parseInput(text) : null;
+      if (!parsed) {
+        setInputError(text ? "That QR code is not a ContentProof record." : "No QR code was found in that image.");
+        return;
+      }
+      setResult(null);
+      setStatus("idle");
+      setLogStatus(null);
+      setLoaded(parsed);
+    } catch {
+      setInputError("Could not read that image.");
+    } finally {
+      setDecodingQr(false);
+    }
+  };
 
   const onFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     setFile(e.target.files?.[0] ?? null);
@@ -116,6 +178,12 @@ function VerifyPageContent() {
           : verifyLegacyPayload(loaded.payload, legacyEmail.trim(), fileHash, keys.keys);
       trackVerifySignature(outcome.ok ? "success" : "failure");
       setResult(outcome);
+      if (outcome.ok && loaded.kind === "record") {
+        setLogStatus({ kind: "checking" });
+        void checkLogInclusion(loaded.record, keys.keys).then(setLogStatus);
+      } else {
+        setLogStatus(null);
+      }
     } catch (err) {
       console.error(err);
       setResult({ ok: false, reason: "malformed" });
@@ -161,6 +229,20 @@ function VerifyPageContent() {
               <button className="btn-primary w-full" onClick={loadManual} disabled={!manualInput.trim()}>
                 Load record
               </button>
+              <div className="space-y-2 pt-2">
+                <label htmlFor="qrImageInput" className="block text-sm font-medium text-light-600">
+                  Or upload a picture of the QR code
+                </label>
+                <input
+                  id="qrImageInput"
+                  type="file"
+                  accept="image/*"
+                  disabled={decodingQr}
+                  onChange={onQrImageChange}
+                  className="glass w-full px-3 py-2 text-light-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                />
+                {decodingQr && <p className="text-xs text-light-500">Reading QR code…</p>}
+              </div>
             </div>
           ) : (
             <div className="space-y-3">
@@ -276,6 +358,18 @@ function VerifyPageContent() {
                     Signed with published key <code>{result.keyId}</code>. This is an attestation by the
                     service, not a signature made with a key the account holder controls.
                   </p>
+                  {logStatus && (
+                    <p className="text-light-500 text-xs" data-testid="log-status">
+                      {logStatus.kind === "checking" && "Checking the transparency log…"}
+                      {logStatus.kind === "included" &&
+                        `Included in the transparency log as entry ${logStatus.index} of ${logStatus.size}; inclusion proof and signed tree head verified.`}
+                      {logStatus.kind === "absent" &&
+                        "Not present in the transparency log (the service may not have storage configured)."}
+                      {logStatus.kind === "invalid" &&
+                        "The transparency log proof did not verify. The record is valid, but the log should be treated with suspicion."}
+                      {logStatus.kind === "unavailable" && "Transparency log could not be reached."}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="glass p-4 border border-red-400/30 bg-red-400/10 space-y-1">

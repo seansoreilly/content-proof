@@ -3,6 +3,9 @@ import { jsonRequest, makeKeyPair, sha256Hex, stubServerKeys } from "@/test/fixt
 import { keyIdFromSpkiBase64 } from "@/lib/keyset";
 import { buildSignedMessage, hashHexToB64url, type SignatureRecord } from "@/lib/record";
 import { createMemoryStore } from "@/lib/rate-limit";
+import { createMemoryLogStore } from "@/lib/log-store";
+import { verifyLogHead, verifyRecordInclusion, type InclusionProofResponse, type SignedLogHead } from "@/lib/log-verify";
+import { parsePublicKeysJson } from "@/lib/keyset";
 
 const session = { user: { email: "signer@gmail.com" } as { email: string } | null };
 
@@ -12,6 +15,7 @@ vi.mock("next-auth", () => ({
 
 // Shared in-memory stores so the sign route and the lookup route see the same data.
 const records = new Map<string, SignatureRecord>();
+let log = createMemoryLogStore();
 vi.mock("@/lib/redis", () => ({
   getCounterStore: () => createMemoryStore(),
   getRecordStore: () => ({
@@ -20,6 +24,7 @@ vi.mock("@/lib/redis", () => ({
     },
     get: async (s: string) => records.get(s) ?? null,
   }),
+  getLogStore: () => log,
 }));
 
 async function routes() {
@@ -28,7 +33,10 @@ async function routes() {
   const verify = await import("@/app/api/verify/route");
   const wellKnown = await import("@/app/.well-known/public-keys.json/route");
   const lookup = await import("@/app/api/sig/[signature]/route");
-  return { sign, verify, wellKnown, lookup };
+  const logHead = await import("@/app/api/log/head/route");
+  const logEntries = await import("@/app/api/log/entries/route");
+  const logProof = await import("@/app/api/log/proof/route");
+  return { sign, verify, wellKnown, lookup, logHead, logEntries, logProof };
 }
 
 describe("API routes", () => {
@@ -36,8 +44,44 @@ describe("API routes", () => {
 
   beforeEach(() => {
     records.clear();
+    log = createMemoryLogStore();
     session.user = { email: "signer@gmail.com" };
     stubServerKeys();
+  });
+
+  it("appends every issued record to the transparency log and proves inclusion", async () => {
+    const { sign, wellKnown, logHead, logEntries, logProof } = await routes();
+    const issued: SignatureRecord[] = [];
+    for (let i = 0; i < 4; i++) {
+      const res = await sign.POST(jsonRequest("http://t/api/sign", { fileHash: sha256Hex(`file ${i}`) }));
+      const body = (await res.json()) as { record: SignatureRecord; logIndex: number };
+      expect(body.logIndex).toBe(i);
+      issued.push(body.record);
+    }
+
+    const keys = parsePublicKeysJson(await (await wellKnown.GET()).json())!;
+    const head = (await (await logHead.GET()).json()) as SignedLogHead;
+    expect(head.size).toBe(4);
+    expect(verifyLogHead(head, keys)).toBe(true);
+
+    const page = (await (await logEntries.GET(new Request("http://t/api/log/entries?from=1&limit=2"))).json()) as {
+      size: number;
+      entries: string[];
+    };
+    expect(page.size).toBe(4);
+    expect(page.entries).toHaveLength(2);
+
+    const byIndex = (await (await logProof.GET(new Request("http://t/api/log/proof?index=2"))).json()) as InclusionProofResponse;
+    expect(byIndex.root).toBe(head.root);
+    expect(verifyRecordInclusion(issued[2], byIndex)).toBe(true);
+    expect(verifyRecordInclusion(issued[1], byIndex)).toBe(false);
+
+    const bySig = await logProof.GET(new Request(`http://t/api/log/proof?signature=${issued[3].s}`));
+    expect(verifyRecordInclusion(issued[3], (await bySig.json()) as InclusionProofResponse)).toBe(true);
+
+    expect((await logProof.GET(new Request(`http://t/api/log/proof?signature=${"Q".repeat(86)}`))).status).toBe(404);
+    expect((await logProof.GET(new Request("http://t/api/log/proof"))).status).toBe(400);
+    expect((await logEntries.GET(new Request("http://t/api/log/entries?from=-1"))).status).toBe(400);
   });
 
   it("signs a hash for the logged-in user and returns a v2 record", async () => {

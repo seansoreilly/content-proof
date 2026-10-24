@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { makeKeyPair, sha256Hex } from "@/test/fixtures";
 import { keyIdFromSpkiBase64, parsePublicKeysJson } from "@/lib/keyset";
 import { verifyRecord } from "@/lib/crypto/verify";
+import { verifyLogHead, verifyRecordInclusion, type InclusionProofResponse, type SignedLogHead } from "@/lib/log-verify";
 import {
   buildSignedMessage,
   decodeRecord,
@@ -92,8 +93,20 @@ describe.skipIf(!base)("live server flow", () => {
     expect(await lookup.json()).toEqual(record);
     expect((await fetch(`${base}/api/trust/${encodeURIComponent("x@gmail.com")}`)).status).toBe(404);
 
-    // 7. Verify page serves
-    const page = await fetch(`${base}/verify`);
-    expect(page.status).toBe(200);
+    // 7. Pages serve
+    expect((await fetch(`${base}/verify`)).status).toBe(200);
+    expect((await fetch(`${base}/sig/${record!.s}`)).status).toBe(200);
+    expect((await fetch(`${base}/sig/${"A".repeat(86)}`)).status).toBe(404);
+
+    // 8. Transparency log: signed head verifies, inclusion proof verifies
+    const head = (await (await fetch(`${base}/api/log/head`)).json()) as SignedLogHead;
+    expect(verifyLogHead(head, keys!)).toBe(true);
+    expect(head.size).toBeGreaterThanOrEqual(1);
+    const proof = (await (
+      await fetch(`${base}/api/log/proof?signature=${encodeURIComponent(record!.s)}`)
+    ).json()) as InclusionProofResponse;
+    expect(verifyRecordInclusion(record!, proof)).toBe(true);
+    const entries = (await (await fetch(`${base}/api/log/entries?from=0&limit=5`)).json()) as { size: number };
+    expect(entries.size).toBe(head.size);
   }, 60_000);
 });

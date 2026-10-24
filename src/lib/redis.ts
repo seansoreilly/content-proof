@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { createMemoryLogStore, createRedisLogStore, type LogStore } from "@/lib/log-store";
 import { createMemoryStore, type CounterStore } from "@/lib/rate-limit";
 import { parseRecordObject, type SignatureRecord } from "@/lib/record";
 
@@ -19,7 +20,27 @@ export function getRedis(): Redis | null {
   return client;
 }
 
-const memoryCounters = createMemoryStore();
+/**
+ * In-memory fallbacks live on globalThis so that every bundle layer in a Next
+ * process (route handlers, server components) shares one instance. Without
+ * this, a record written by /api/sign would be invisible to the /sig page in
+ * development.
+ */
+interface MemoryStores {
+  counters: CounterStore;
+  records: Map<string, SignatureRecord>;
+  log: LogStore;
+}
+const memoryKey = "__contentproofMemoryStores" as const;
+const globalStores = globalThis as typeof globalThis & { [memoryKey]?: MemoryStores };
+const memory: MemoryStores =
+  globalStores[memoryKey] ??
+  (globalStores[memoryKey] = {
+    counters: createMemoryStore(),
+    records: new Map<string, SignatureRecord>(),
+    log: createMemoryLogStore(),
+  });
+const memoryCounters = memory.counters;
 
 export function getCounterStore(): CounterStore {
   const redis = getRedis();
@@ -36,7 +57,17 @@ export interface RecordStore {
 }
 
 const RECORD_TTL_SECONDS = 365 * 24 * 60 * 60;
-const memoryRecords = new Map<string, SignatureRecord>();
+const memoryRecords = memory.records;
+const memoryLog = memory.log;
+let redisLog: LogStore | null = null;
+
+/** The append-only transparency log. Entries never expire. */
+export function getLogStore(): LogStore {
+  const redis = getRedis();
+  if (!redis) return memoryLog;
+  if (!redisLog) redisLog = createRedisLogStore(redis);
+  return redisLog;
+}
 
 export function getRecordStore(): RecordStore {
   const redis = getRedis();

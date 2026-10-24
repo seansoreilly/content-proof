@@ -25,7 +25,7 @@ The link looks like `https://<host>/verify#P=...`. Everything after `#` stays in
 
 ## How to verify a file
 
-1. Scan the QR code or open the verification link.
+1. Scan the QR code or open the verification link. If you only have a picture or screenshot of the QR code, upload it on the verification page and it is decoded in your browser.
 2. Select the file you want to check. It is hashed locally.
 3. The page shows the result, the signer's Google account and the timestamp.
 
