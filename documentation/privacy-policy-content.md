@@ -103,31 +103,36 @@ We do not sell, rent, or trade your personal information to third parties for ma
 - **Retention**: When storage is configured, signature records are kept until deleted or until the storage retention period set by the operator ends
 
 ### Account Information
-- **Active accounts**: Retained while your account is active
-- **Inactive accounts**: Deleted after 2 years of inactivity
-- **Account deletion**: Immediately deleted when you request account closure
+ContentProof keeps no account profile. Signing in with Google produces a
+signed session cookie held by your browser; nothing about your account is
+written to our storage. Signing out discards the session.
 
 ### Legal Requirements
 We may retain data longer if required by law or for legitimate business purposes such as fraud prevention.
 
 ## Your Rights and Choices
 
-### Data Access
-You have the right to:
-- **View your data**: Request a copy of all data we have about you
-- **Signature history**: Access a list of all signatures you've created
-- **Account information**: Review your profile and authentication data
+### What we hold about you
+When storage is configured, the only data tied to you is the signature
+record itself: the file hash, your Google account email, the time, the key
+id and the signature. Each stored record expires automatically one year
+after it was created. When storage is not configured, nothing is retained
+after the response is sent.
 
-### Data Control
-You can:
-- **Delete signatures**: Remove individual signatures you've created
-- **Close your account**: Delete all your data from our systems
-- **Opt out**: Disable analytics tracking (where applicable)
+### Data Access and Deletion
+- **View a record**: Every record is contained in the QR code or link you
+  received. If storage is configured, `GET /api/sig/<signature>` returns the
+  same record.
+- **Request deletion**: Email the address below with the signature(s) you
+  want removed from storage. Deleting a stored record does not invalidate
+  QR codes or links already shared, because they are self-contained.
+- **Opt out of analytics**: Block the analytics script in your browser
+  (where applicable).
 
 ### Data Portability
-- **Export signatures**: Download your signature data in standard formats
-- **QR codes**: Keep copies of your QR codes for offline verification
-- **Verification records**: Export verification history for your records
+- **Records**: The record in your QR code or link is the complete, portable
+  form of your data; keep copies for offline verification.
+- There is no separate signature history or export feature.
 
 ## Cookies and Tracking
 
