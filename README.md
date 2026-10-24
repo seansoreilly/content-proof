@@ -199,6 +199,10 @@ Optional:
 
 CI (`.github/workflows/ci.yml`) runs typecheck, lint, test and build.
 
+Regenerate `package-lock.json` with npm 10 (`npx npm@10 install
+--package-lock-only`), which is what CI and Vercel run. npm 12 omits optional
+platform packages from the lockfile and `npm ci` on npm 10 then refuses it.
+
 ## Deployment
 
 Deploy on [Vercel](https://vercel.com/) with `vercel --prod`, or build locally
