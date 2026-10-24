@@ -164,11 +164,13 @@ function VerifyPageContent() {
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="glass p-4 border border-green-400/30 bg-green-50 text-sm space-y-1">
+              {/* Neutral until verified: nothing in a record is trustworthy before the check. */}
+              <div className="glass p-4 border border-white/20 bg-white/5 text-sm space-y-1">
+                <p className="text-light-500 text-xs uppercase tracking-wide">Record loaded, not yet verified</p>
                 {loaded.kind === "record" ? (
                   <>
                     <p className="text-light-600">
-                      <span className="text-light-500">Attested for:</span>{" "}
+                      <span className="text-light-500">Claims to be for:</span>{" "}
                       <span className="font-medium break-all">{loaded.record.e}</span>
                     </p>
                     <p className="text-light-600">
