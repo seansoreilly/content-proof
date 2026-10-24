@@ -1,6 +1,6 @@
 # Privacy Policy - Content Proof
 
-*Last updated: June 16, 2025*
+*Last updated: October 24, 2026*
 
 ## Introduction
 
@@ -10,16 +10,19 @@ Content Proof is committed to protecting your privacy and being transparent abou
 
 ### 1. Account Information
 When you sign in with Google, we collect:
-- **Email address**: Your Gmail address for identity verification
+- **Email address**: Your Google account email, used to identify you and included in the records we sign
 - **Basic profile information**: Name and profile picture from your Google account
 - **Authentication tokens**: Temporary tokens to maintain your session
 
-### 2. Signature Metadata
-When you sign files, we store:
+### 2. Signature Records
+When you sign a file, our server receives only the SHA-256 hash of the file, never the file. If record storage is configured, we store the signature record:
 - **File hash**: SHA-256 fingerprint of your file (not the file itself)
+- **Email**: The Google account that submitted the hash
 - **Timestamp**: When the signature was created
-- **Signature data**: Cryptographic signature for verification purposes
-- **Public key identifier**: Reference to the key used for signing
+- **Signature**: The ContentProof signature over the record
+- **Key identifier**: Reference to the key used for signing
+
+If storage is not configured, no record is kept on our servers and the record exists only in the QR code or link you receive.
 
 ### 3. Usage Information
 We may collect:
@@ -30,8 +33,8 @@ We may collect:
 ## What We Don't Collect
 
 ### Files and Content
-- **Your files**: We never store the actual files you upload
-- **File contents**: Files are processed locally in your browser when possible
+- **Your files**: Files never leave your browser. Only their SHA-256 hash is sent to us
+- **File contents**: Files are hashed locally in your browser
 - **Personal documents**: No access to your personal files or Google Drive
 
 ### Sensitive Information
@@ -43,7 +46,7 @@ We may collect:
 
 ### 1. Service Provision
 - **Authentication**: Verify your identity for secure access
-- **Signature creation**: Generate cryptographic signatures tied to your Gmail identity
+- **Signature creation**: Sign a record attesting that your Google account submitted a file hash at a given time
 - **Verification**: Enable others to verify signatures you've created
 
 ### 2. Service Improvement
@@ -65,12 +68,13 @@ We only share information with:
 
 **Vercel**: Our hosting provider processes data according to their privacy policy and security standards.
 
-**Upstash**: Our Redis provider stores session and signature metadata with enterprise-grade security.
+**Upstash**: Our Redis provider stores signature records and rate-limit counters, when storage is configured.
 
 ### Public Information
 Some information is intentionally public:
-- **Signature verification data**: Anyone with a QR code can verify signatures
-- **Signer identity**: Gmail addresses are included in signature data for verification
+- **Signature verification data**: Anyone with a QR code or link can verify the record
+- **Signer identity**: Your Google account email is included in the QR code and link
+- **Verification link payload**: It is carried in the URL fragment (after `#`), which browsers do not send to our server, so opening a link does not disclose it to us
 - **Public keys**: Available publicly for signature verification
 
 ### We Never Sell Data
@@ -80,7 +84,7 @@ We do not sell, rent, or trade your personal information to third parties for ma
 
 ### Encryption
 - **Data in transit**: All data is encrypted using TLS/SSL
-- **Data at rest**: Stored data is encrypted using industry-standard methods
+- **Data at rest**: Stored data is protected by our storage provider's encryption
 - **Authentication**: Secure OAuth 2.0 implementation with Google
 
 ### Access Controls
@@ -96,9 +100,7 @@ We do not sell, rent, or trade your personal information to third parties for ma
 ## Data Retention
 
 ### Signature Data
-- **Retention period**: Signature metadata is retained for 1 year by default
-- **Extended retention**: Users can request longer retention for important signatures
-- **Automatic deletion**: Old signatures are automatically deleted after the retention period
+- **Retention**: When storage is configured, signature records are kept until deleted or until the storage retention period set by the operator ends
 
 ### Account Information
 - **Active accounts**: Retained while your account is active

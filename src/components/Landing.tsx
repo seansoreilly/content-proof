@@ -9,18 +9,18 @@ import { Session } from "next-auth";
 
 const features = [
   {
-    title: "Secure Signatures",
-    desc: "Every file is signed with Ed25519 ensuring tamper-proof authenticity.",
+    title: "Signed attestations",
+    desc: "ContentProof signs a record of your file's fingerprint, your Google account and the time.",
     icon: "🔐",
   },
   {
-    title: "QR Code Sharing",
-    desc: "Share verification data instantly via downloadable QR codes.",
+    title: "QR code sharing",
+    desc: "The whole record travels in a QR code or link; no account needed to verify.",
     icon: "📱",
   },
   {
-    title: "Offline Verification",
-    desc: "Verification works even without an internet connection.",
+    title: "Verify anywhere",
+    desc: "Checks run in the browser against our published keys and work offline once cached.",
     icon: "🔒",
   },
 ];
@@ -64,8 +64,8 @@ export default function Landing({ authSection, session }: LandingProps) {
           Content&nbsp;Proof
         </GradientHeading>
         <p className="text-lg md:text-2xl text-dark-blue-400 mb-8 max-w-2xl mx-auto">
-          Generate cryptographic signatures for your digital assets and verify
-          authenticity in seconds.
+          Get a signed attestation that your Google account submitted a file&apos;s
+          fingerprint at a given time, and let anyone verify it in seconds.
         </p>
 
         {/* Authentication Section */}
@@ -119,7 +119,7 @@ export default function Landing({ authSection, session }: LandingProps) {
       {/* Trust Indicators */}
       <section className="w-full bg-white/5 backdrop-blur-sm py-12 border-t border-white/10">
         <p className="text-center text-sm text-light-500">
-          Built with industry standard Ed25519 signatures
+          Attestations signed with Ed25519 and verified against published keys
         </p>
       </section>
 

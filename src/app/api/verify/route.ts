@@ -1,53 +1,47 @@
 import { NextResponse } from "next/server";
-import { verifySignatureAgainstKnownKeys } from "@/lib/crypto/verify";
+import { verifyRecord } from "@/lib/crypto/verify";
+import { buildPublicKeysJson } from "@/lib/keys";
+import { createRateLimiter, getClientIp, rateLimitedResponse } from "@/lib/rate-limit";
+import { hashB64urlToHex, parseRecordObject } from "@/lib/record";
+import { getCounterStore } from "@/lib/redis";
 
-interface VerifyRequestBody {
-  fileHash: string;
-  gmail: string;
-  timestamp: number;
-  signature: string;
-}
+const limiter = createRateLimiter(getCounterStore(), {
+  limit: 60,
+  windowSeconds: 60,
+  prefix: "rl:verify",
+});
 
 /**
- * POST /api/verify
+ * POST /api/verify  { v, k, h, e, t, s }  →  { valid, keyId?, reason? }
  *
- * Verifies that a detached Ed25519 signature was generated for the provided
- * payload (fileHash, gmail, timestamp). The endpoint does **not** require the
- * caller to provide the public key; the server will attempt verification
- * against all known keys (current + historical).
+ * Server-side counterpart of the browser verifier for integrators who would
+ * rather not ship crypto. The server has no file, so this checks that the
+ * record is genuinely one the service issued; the caller still compares the
+ * record's hash with the file they hold.
  */
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<Response> {
   try {
-    const { fileHash, gmail, timestamp, signature } = (await request.json()) as Partial<VerifyRequestBody>;
+    const { allowed } = await limiter(getClientIp(request));
+    if (!allowed) return rateLimitedResponse();
 
-    // Basic input validation – all fields must exist and be of the expected type
-    if (
-      typeof fileHash !== "string" ||
-      !/^[0-9a-fA-F]{64}$/.test(fileHash) ||
-      typeof gmail !== "string" ||
-      !/^.+@gmail\.com$/i.test(gmail) ||
-      typeof timestamp !== "number" ||
-      !Number.isFinite(timestamp) ||
-      typeof signature !== "string" ||
-      signature.length === 0
-    ) {
-      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
+    const record = parseRecordObject(body);
+    if (!record) {
+      return NextResponse.json({ error: "Invalid signature record" }, { status: 400 });
     }
 
-    // Reconstruct the signed message (must match the order in generateSignature)
-    const message = `${fileHash}:${gmail}:${timestamp}`;
-
-    const matchedPublicKey = verifySignatureAgainstKnownKeys(message, signature);
-
+    const result = verifyRecord(record, hashB64urlToHex(record.h), buildPublicKeysJson());
     return NextResponse.json(
-      {
-        valid: matchedPublicKey !== null,
-        publicKey: matchedPublicKey,
-      },
+      { valid: result.ok, keyId: result.keyId ?? null, reason: result.reason ?? null },
       { status: 200 }
     );
-  } catch (err) {
-    console.error("Verification failed", err);
+  } catch (error) {
+    console.error("[verify] failed", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
-} 
+}

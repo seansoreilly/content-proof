@@ -625,3 +625,16 @@ test("complete signing flow", async ({ page }) => {
 - Blockchain integration for immutable records
 - AI content detection integration
 - Enterprise PKI bridge solutions
+
+## Implementation notes (2026-10-24)
+
+Deltas between this PRD and the implementation.
+
+- **Attestation model adopted.** A signature means: the ContentProof service attests that a given Google account submitted a given SHA-256 hash at a given time. The user holds no key, so there is no non-repudiation by the user, and a verifier trusts ContentProof's published key. Earlier non-repudiation and "tamper-proof" claims were removed.
+- **Trust scoring dropped.** Trust levels, the `/api/trust` endpoint and the `/api/qr` endpoint were removed.
+- **Any file type, up to 500 MB.** Files are hashed in the browser in chunks; only the hash is sent.
+- **Record format.** Version 2 payload: `2~<kid>~<hash>~<email>~<timestamp>~<signature>` (base64url hash and signature, percent-encoded email, decimal millisecond timestamp). Signed message is `<hash_hex>:<email>:<timestamp>`. See the README for the full specification.
+- **Fragment, not query string.** The QR link is `https://<host>/verify#P=<payload>`, so the payload is never sent to the server. Legacy `?data=` links are still accepted only when the key they carry matches a published key.
+- **Well-known keys.** Verification fetches `/.well-known/public-keys.json` (`current` plus `keys[kid]` with SPKI DER public keys), cached in the browser for offline use. Keys carried in QR codes are never trusted.
+- **Optional services.** `GET /api/sig/<signature>` returns a stored record and `POST /api/verify` verifies server-side. Both are rate limited. Storage and shared rate limiting use Upstash/KV when configured, otherwise in-memory.
+- **Tests and CI added.** Unit tests plus a GitHub Actions workflow running typecheck, lint, test and build.

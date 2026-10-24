@@ -1,45 +1,60 @@
 import { NextResponse } from "next/server";
-import { generateSignature } from "@/lib/crypto/ed25519";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
-import { redis } from "@/lib/redis";
+import { signFileHash } from "@/lib/crypto/ed25519";
+import { createRateLimiter, rateLimitedResponse } from "@/lib/rate-limit";
+import { getCounterStore, getRecordStore } from "@/lib/redis";
 
-export async function POST(request: Request) {
+const HASH_HEX_RE = /^[0-9a-fA-F]{64}$/;
+
+// 30 signatures per account per minute is generous for a human and a hard
+// ceiling for anything scripted.
+const limiter = createRateLimiter(getCounterStore(), {
+  limit: 30,
+  windowSeconds: 60,
+  prefix: "rl:sign",
+});
+
+/**
+ * POST /api/sign  { fileHash: <sha256 hex> }  →  { record }
+ *
+ * The file itself never reaches the server; the browser hashes it and the
+ * service attests to (hash, account, time).
+ */
+export async function POST(request: Request): Promise<Response> {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || !session.user?.email) {
+    const email = session?.user?.email;
+    if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { fileHash } = await request.json();
-    if (typeof fileHash !== "string" || !/^[0-9a-fA-F]{64}$/.test(fileHash)) {
+    const { allowed } = await limiter(email.toLowerCase());
+    if (!allowed) return rateLimitedResponse();
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
+    const fileHash = (body as { fileHash?: unknown } | null)?.fileHash;
+    if (typeof fileHash !== "string" || !HASH_HEX_RE.test(fileHash)) {
       return NextResponse.json({ error: "Invalid fileHash" }, { status: 400 });
     }
 
-    const email = session.user.email!;
-    const timestamp = Date.now();
-    const signature = generateSignature({ fileHash, gmail: email, timestamp });
+    const record = signFileHash(fileHash, email);
 
-    // Persist signature data for future lookup (trust, QR, etc.)
     try {
-      const signatureKey = `signature:${signature.signature}`;
-      await redis.set(signatureKey, JSON.stringify({
-        fileHash,
-        gmail: email,
-        timestamp,
-        publicKey: signature.publicKey,
-      }));
-
-      // Increment the signer's total signature count (used for trust levels)
-      await redis.incr(`user:${email}:signatures`);
-    } catch (redisError) {
-      console.warn("Redis operation failed in /api/sign:", redisError);
-      // Continue without Redis - signature generation still works
+      await getRecordStore().put(record);
+    } catch (storeError) {
+      // Storage is optional; the record is self-contained.
+      console.warn("[sign] record store unavailable", storeError);
     }
 
-    return NextResponse.json({ id: signature.signature, ...signature }, { status: 200 });
-  } catch (err) {
-    console.error("Signature generation failed", err);
+    return NextResponse.json({ record }, { status: 200 });
+  } catch (error) {
+    console.error("[sign] failed", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
-} 
+}
