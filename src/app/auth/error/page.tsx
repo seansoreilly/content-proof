@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Button, Eyebrow, Panel } from "@/components/ui";
 import { authErrorMessage, firstParam } from "../messages";
 
@@ -10,6 +11,8 @@ export default async function AuthErrorPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<React.JSX.Element> {
   const params = await searchParams;
+  // NextAuth sends `?error=undefined` when it has no code; keep the address clean.
+  if (firstParam(params.error) === "undefined") redirect("/auth/error");
   const message = authErrorMessage(firstParam(params.error)) ?? "Sign-in failed. Try again.";
 
   return (

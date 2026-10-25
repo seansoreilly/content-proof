@@ -55,7 +55,7 @@ export default function RootLayout({
     >
       <body className="font-body bg-paper text-ink">
         <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-4">
-          <Link href="/" className="flex items-center gap-3 text-ink">
+          <Link href="/" className="-my-2 flex items-center gap-3 py-2 text-ink">
             <SealMark tone="sealed" size={28} label="CP" />
             <span className="font-display font-semibold uppercase tracking-[0.12em]">
               ContentProof
