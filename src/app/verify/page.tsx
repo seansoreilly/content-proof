@@ -48,6 +48,23 @@ async function checkLogInclusion(record: SignatureRecord, keys: PublicKeysLoad["
   }
 }
 
+const HIDDEN_CHARS = /[​-‏‪-‮⁠-⁤⁦-⁩﻿]/g;
+
+/**
+ * An email as it should be read, not as it was typed: bidi overrides and
+ * zero-width characters can make `moc.live@x` look like a trusted address.
+ * They are stripped for display only; verification signs the raw bytes.
+ */
+function DisplayEmail({ email }: { email: string }): React.JSX.Element {
+  const clean = email.replace(HIDDEN_CHARS, "");
+  return (
+    <span className="break-words font-medium">
+      {clean}
+      {clean !== email && <span className="text-void"> (hidden characters removed)</span>}
+    </span>
+  );
+}
+
 /** A record time in the viewer's zone, with the ISO value in `dateTime`. */
 function TimeText({ ms }: { ms: number }): React.JSX.Element {
   const iso = toIsoUtc(ms);
@@ -285,7 +302,7 @@ function VerifyPageContent() {
                   <div className="flex flex-col gap-1">
                     <p>
                       <span className="text-mute">Claims to be for:</span>{" "}
-                      <span className="break-words font-medium">{loaded.record.e}</span>
+                      <DisplayEmail email={loaded.record.e} />
                     </p>
                     <p>
                       <span className="text-mute">At:</span>{" "}
@@ -364,7 +381,7 @@ function VerifyPageContent() {
                 <VerifyResult tone="sealed" title="Attestation verified">
                   <div className="flex flex-col gap-2">
                     <p>
-                      ContentProof attests that <span className="break-words font-medium">{attestedFor}</span>{" "}
+                      ContentProof attests that <DisplayEmail email={attestedFor} />{" "}
                       submitted this exact file on <TimeText ms={attestedMs} />.
                     </p>
                     {result.userSigned ? (

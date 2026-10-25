@@ -52,7 +52,11 @@ const KEY_ID_RE = /^[A-Za-z0-9_-]{16}$/;
 const B64_32_RE = /^[A-Za-z0-9_-]{43}$/;
 const HASH_HEX_RE = /^[0-9a-f]{64}$/i;
 const SIGNATURE_RE = /^[A-Za-z0-9_-]{86}$/;
-const DECIMAL_RE = /^\d{1,16}$/;
+// Plain decimal only: no sign, exponent, hex or leading zeros, so one record has one encoding.
+const DECIMAL_RE = /^(?:0|[1-9]\d{0,15})$/;
+// An address never contains whitespace or control characters; a line break
+// inside a pasted link must not survive into the signed email field.
+const CONTROL_OR_SPACE_RE = /[\s\u0000-\u001f\u007f]/;
 
 export function buildSignedMessage(hashHex: string, email: string, timestamp: number): string {
   return `${hashHex}:${email}:${timestamp}`;
@@ -135,7 +139,7 @@ export function parseRecordObject(input: unknown): SignatureRecord | null {
     v === null ||
     typeof o.k !== "string" || !KEY_ID_RE.test(o.k) ||
     typeof o.h !== "string" || !B64_32_RE.test(o.h) ||
-    typeof o.e !== "string" || !o.e.includes("@") || o.e.length > 320 ||
+    typeof o.e !== "string" || !o.e.includes("@") || o.e.length > 320 || CONTROL_OR_SPACE_RE.test(o.e) ||
     typeof t !== "number" || !Number.isSafeInteger(t) || t <= 0 ||
     !isSignatureString(o.s)
   ) {

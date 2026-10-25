@@ -36,6 +36,30 @@ describe("verifier input parsing", () => {
     expect(parseVerificationInput(stringToBase64Url(JSON.stringify(legacy)))).toBeNull();
   });
 
+  it("tolerates the wrapping and line breaks that mail and chat clients add", () => {
+    const link = createVerificationUrl(encodeRecord(record), "https://cp.app");
+    const expected = { kind: "record", record };
+    expect(parseVerificationInput(`<${link}>`)).toEqual(expected);
+    expect(parseVerificationInput(`"${link}"`)).toEqual(expected);
+    expect(parseVerificationInput(`[verify it](${link})`)).toEqual(expected);
+    expect(parseVerificationInput(`Here is the record:\n${link}\nand another ${link}`)).toEqual(expected);
+    const mid = Math.floor(link.length / 2);
+    expect(parseVerificationInput(`${link.slice(0, mid)}\n${link.slice(mid)}`)).toEqual(expected);
+    expect(parseVerificationInput(link.replace(/~/g, "%7E"))).toEqual(expected);
+  });
+
+  it("keeps a %7E inside the email distinct from the separators", () => {
+    const tilde = { ...record, e: "a~b@example.com" };
+    expect(parseVerificationInput(encodeRecord(tilde))).toEqual({ kind: "record", record: tilde });
+  });
+
+  it("rejects non-canonical version and timestamp encodings", () => {
+    const encoded = encodeRecord(record);
+    expect(parseVerificationInput(encoded.replace(/^2~/, "02~"))).toBeNull();
+    expect(parseVerificationInput(encoded.replace(`~${record.t}~`, `~0${record.t}~`))).toBeNull();
+    expect(parseVerificationInput(encoded.replace(`~${record.t}~`, `~${record.t}.0~`))).toBeNull();
+  });
+
   it("returns null for junk", () => {
     expect(parseVerificationInput("")).toBeNull();
     expect(parseVerificationInput("hello there")).toBeNull();
