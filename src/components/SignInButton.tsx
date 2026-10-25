@@ -11,7 +11,9 @@ export function SignInButton({ callbackUrl }: { callbackUrl?: string }): ReactEl
         // UI hint only. The server registers the debug provider solely when
         // DEBUG_AUTH=true outside production; this flag just picks which
         // provider the button calls.
-        if (process.env.NEXT_PUBLIC_DEBUG_AUTH === "true") {
+        // Both checks are inlined at build time, so a production bundle never
+        // calls the debug provider even if the flag leaks into its environment.
+        if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_AUTH === "true") {
           void signIn("debug", { redirect: false }).then(() => {
             if (callbackUrl) window.location.assign(callbackUrl);
             else window.location.reload();
