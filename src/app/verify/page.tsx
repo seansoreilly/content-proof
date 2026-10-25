@@ -104,6 +104,9 @@ function VerifyPageContent() {
   const [decodingQr, setDecodingQr] = useState(false);
   const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
+  // Kept apart from inputError so a later valid selection clears it without
+  // hiding a problem with the record.
+  const [fileError, setFileError] = useState<string | null>(null);
 
   // Bumped whenever the file or record changes or a check starts, so a slower
   // earlier check cannot overwrite the current state.
@@ -214,9 +217,10 @@ function VerifyPageContent() {
     if (chosen && chosen.size > MAX_FILE_SIZE_BYTES) {
       setFile(null);
       setFileInputKey((k) => k + 1);
-      setInputError(`Files larger than ${MAX_FILE_SIZE_LABEL} are not supported.`);
+      setFileError(`Files larger than ${MAX_FILE_SIZE_LABEL} are not supported.`);
       return;
     }
+    setFileError(null);
     setFile(chosen);
   };
 
@@ -224,6 +228,7 @@ function VerifyPageContent() {
   const clearFile = useCallback(() => {
     runId.current += 1;
     setFile(null);
+    setFileError(null);
     setFileInputKey((k) => k + 1);
     setResult(null);
     setStatus("idle");
@@ -278,10 +283,10 @@ function VerifyPageContent() {
     <div className="mx-auto flex w-full max-w-[42rem] flex-col gap-6 px-4 py-10 md:py-16">
       <h1>Verify</h1>
 
-      {(inputError || keysError) && (
+      {(inputError || keysError || fileError) && (
         <Panel>
           <p className="font-medium text-void" role="alert">
-            {inputError ?? keysError}
+            {inputError ?? keysError ?? fileError}
           </p>
         </Panel>
       )}
