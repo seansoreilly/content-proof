@@ -248,7 +248,7 @@ function VerifyPageContent() {
                   <div className="flex flex-col gap-1">
                     <p>
                       <span className="text-mute">Claims to be for:</span>{" "}
-                      <span className="break-all font-medium">{loaded.record.e}</span>
+                      <span className="break-words font-medium">{loaded.record.e}</span>
                     </p>
                     <p>
                       <span className="text-mute">At:</span>{" "}
@@ -323,7 +323,7 @@ function VerifyPageContent() {
                 <VerifyResult tone="sealed" title="Attestation verified">
                   <div className="flex flex-col gap-2">
                     <p>
-                      ContentProof attests that <span className="break-all font-medium">{attestedFor}</span>{" "}
+                      ContentProof attests that <span className="break-words font-medium">{attestedFor}</span>{" "}
                       submitted this exact file on {attestedAt}.
                     </p>
                     {result.userSigned ? (
