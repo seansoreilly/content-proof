@@ -3,6 +3,9 @@
 import React, { useEffect, useState } from "react";
 import { generateQrCodeDataUrl } from "@/lib/qr";
 import { createVerificationUrl, encodeRecord, type SignatureRecord } from "@/lib/record";
+import { composeSealPng, rimTextFor } from "@/lib/seal-image";
+import { Seal } from "@/components/Seal";
+import { Button, Panel, RecordSummary } from "@/components/ui";
 
 interface Props {
   /** The signed record returned by /api/sign. */
@@ -13,17 +16,27 @@ interface Props {
 
 type CopyTarget = "link" | "record";
 
+const FALLBACK_PAPER = "#F7F7F4";
+const FALLBACK_ACCENT = "#5B3FA3";
+
+function readToken(name: "--paper" | "--accent", fallback: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value === "" ? fallback : value;
+}
+
 /**
- * Renders the verification link for a record as a QR code, with the link and
- * the raw record available to copy for people who would rather paste.
+ * Renders a record as a pressed seal around its verification QR code, with the
+ * link and the raw record available to copy and the seal available as a PNG.
  */
 export const QrCodeGenerator: React.FC<Props> = ({ record, size = 288 }) => {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [copied, setCopied] = useState<CopyTarget | null>(null);
 
   const encodedRecord = encodeRecord(record);
+  const rimText = rimTextFor(record);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +59,7 @@ export const QrCodeGenerator: React.FC<Props> = ({ record, size = 288 }) => {
     };
   }, [encodedRecord, size]);
 
-  const copy = async (target: CopyTarget) => {
+  const copy = async (target: CopyTarget): Promise<void> => {
     const text = target === "link" ? verificationUrl : encodedRecord;
     if (!text) return;
     try {
@@ -58,95 +71,90 @@ export const QrCodeGenerator: React.FC<Props> = ({ record, size = 288 }) => {
     }
   };
 
+  const downloadSeal = async (): Promise<void> => {
+    if (!dataUrl) return;
+    setDownloadError(null);
+    try {
+      const png = await composeSealPng({
+        qrDataUrl: dataUrl,
+        rimText,
+        colors: {
+          paper: readToken("--paper", FALLBACK_PAPER),
+          accent: readToken("--accent", FALLBACK_ACCENT),
+        },
+      });
+      const link = document.createElement("a");
+      link.href = png;
+      link.download = `contentproof-seal-${record.s.slice(0, 8)}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error("Seal download failed", err);
+      setDownloadError("Failed to create the seal image. Please try again.");
+    }
+  };
+
   if (error) {
     return (
-      <div className="glass p-4 border border-red-400/30 bg-red-400/10">
-        <p className="text-red-400 font-medium">{error}</p>
-      </div>
+      <Panel>
+        <p className="font-semibold text-void" role="alert">
+          {error}
+        </p>
+      </Panel>
     );
   }
 
   if (!dataUrl) {
     return (
-      <div className="glass flex items-center justify-center p-6">
-        <div className="w-5 h-5 border-2 border-accent-purple/30 border-t-accent-purple rounded-full animate-spin mr-3"></div>
-        <p className="text-light-600 font-medium">Generating QR code…</p>
-      </div>
+      <Panel>
+        <p className="text-mute" role="status">
+          Generating QR code…
+        </p>
+      </Panel>
     );
   }
 
   return (
-    <div className="glass flex flex-col items-center gap-6 p-6">
-      <div className="w-full text-sm text-light-600 space-y-1">
-        <p>
-          <span className="text-light-500">Attested for:</span>{" "}
-          <span className="font-medium break-all">{record.e}</span>
-        </p>
-        <p>
-          <span className="text-light-500">At:</span>{" "}
-          <span className="font-medium">{new Date(record.t).toLocaleString()}</span>
-        </p>
-        <p>
-          <span className="text-light-500">Key:</span>{" "}
-          <code className="text-xs">{record.k}</code>
-        </p>
+    <div className="flex flex-col items-center gap-6">
+      <Seal rimText={rimText} pressed={!!dataUrl}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={dataUrl}
+          alt="QR code containing the verification link"
+          className="block h-full w-full"
+        />
+      </Seal>
+
+      <div className="w-full">
+        <RecordSummary record={record} showHash={false} timeFormat="local" />
       </div>
 
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={dataUrl}
-        alt="QR code containing the verification link"
-        width={size}
-        height={size}
-        className="border border-white/30 rounded-xl shadow-2xl bg-white p-4"
-      />
+      <div className="flex w-full flex-wrap gap-3">
+        <Button onClick={() => void downloadSeal()}>Download seal</Button>
+        {verificationUrl && (
+          <Button variant="secondary" onClick={() => void copy("link")}>
+            {copied === "link" ? "Copied" : "Copy link"}
+          </Button>
+        )}
+      </div>
 
-      <a
-        href={dataUrl}
-        download="contentproof-qrcode.png"
-        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium btn-primary"
-      >
-        Download QR code
-      </a>
-
-      {verificationUrl && (
-        <div className="w-full max-w-md space-y-3">
-          <div className="glass p-4 rounded-lg bg-white/5 space-y-2">
-            <p className="text-xs text-light-500 font-medium">Verification link</p>
-            <code className="text-xs text-light-600 break-all leading-relaxed block">
-              {verificationUrl}
-            </code>
-            <button
-              onClick={() => copy("link")}
-              className={`text-xs px-3 py-1.5 rounded-md ${
-                copied === "link" ? "bg-green-400/20 text-green-400" : "bg-white/10 text-light-500 hover:bg-white/20"
-              }`}
-            >
-              {copied === "link" ? "Copied" : "Copy link"}
-            </button>
-          </div>
-
-          <details className="glass p-4 rounded-lg bg-white/5">
-            <summary className="cursor-pointer text-xs text-light-500 font-medium select-none">
-              Raw record (for pasting into the verifier)
-            </summary>
-            <code className="text-xs text-light-600 break-all leading-relaxed block mt-2">
-              {encodedRecord}
-            </code>
-            <button
-              onClick={() => copy("record")}
-              className={`mt-2 text-xs px-3 py-1.5 rounded-md ${
-                copied === "record" ? "bg-green-400/20 text-green-400" : "bg-white/10 text-light-500 hover:bg-white/20"
-              }`}
-            >
-              {copied === "record" ? "Copied" : "Copy record"}
-            </button>
-          </details>
-        </div>
+      {downloadError && (
+        <p className="w-full font-semibold text-void" role="alert">
+          {downloadError}
+        </p>
       )}
 
-      <p className="text-xs text-light-400 leading-relaxed text-center max-w-sm">
-        Anyone with this QR code or link can confirm that this account submitted
+      <details className="w-full">
+        <summary className="eyebrow cursor-pointer select-none">Raw record</summary>
+        <code className="mt-3 block break-all font-mono text-[13px]">{encodedRecord}</code>
+        <Button variant="secondary" className="mt-3" onClick={() => void copy("record")}>
+          {copied === "record" ? "Copied" : "Copy record"}
+        </Button>
+      </details>
+
+      <p className="max-w-[60ch] text-sm text-mute">
+        Anyone with this seal or link can confirm that this account submitted
         this exact file at this time. The record stays in the link; nothing is
         looked up on our servers except our published keys.
       </p>
