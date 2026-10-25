@@ -1,0 +1,96 @@
+.root {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--paper);
+  box-shadow:
+    inset 1px 1px 2px var(--relief-hi),
+    inset -2px -2px 4px var(--relief),
+    6px 8px 18px -8px var(--relief);
+  color: var(--mute);
+  transition:
+    color 200ms ease-out,
+    transform 200ms ease-out;
+}
+
+.rim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transition: transform 600ms ease-out;
+}
+
+.ring {
+  stroke: currentColor;
+  opacity: 0.55;
+  transition: opacity 200ms ease-out;
+}
+
+.text {
+  fill: currentColor;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.glyph {
+  width: 30%;
+  height: 30%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 200ms ease-out;
+}
+
+/* A file is over the zone, or is being signed: the seal takes the ink. */
+.inked {
+  color: var(--accent);
+}
+
+.inked .ring {
+  opacity: 1;
+}
+
+.inked .glyph {
+  transform: translateY(2px);
+}
+
+.inked .rim {
+  transform: rotate(24deg);
+}
+
+.busy .rim {
+  animation: turn 6s linear infinite;
+}
+
+.busy .glyph {
+  opacity: 0;
+}
+
+@keyframes turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root,
+  .rim,
+  .glyph {
+    transition: none;
+  }
+  .inked .rim,
+  .inked .glyph {
+    transform: none;
+  }
+  .busy .rim {
+    animation: none;
+  }
+}
