@@ -1,16 +1,35 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Bricolage_Grotesque, Source_Serif_4, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/SessionProvider";
 import Script from "next/script";
 import { GA_TRACKING_ID } from "@/lib/analytics";
 import Link from "next/link";
 
-const inter = Inter({ subsets: ["latin"] });
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  axes: ["opsz"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const body = Source_Serif_4({
+  subsets: ["latin"],
+  axes: ["opsz"],
+  variable: "--font-body",
+  display: "swap",
+});
+
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Content Proof",
-  description: "Secure your files",
+  description:
+    "A notary for files. Your browser hashes a file and signs it, ContentProof countersigns who, what and when, and anyone can verify the seal.",
 };
 
 export default function RootLayout({
@@ -19,14 +38,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html
+      lang="en"
+      className={`${display.variable} ${body.variable} ${mono.variable}`}
+    >
+      <body className="font-body bg-paper text-ink">
         {/* Top Right Navigation */}
-        <header className="absolute top-6 right-6 z-50 flex items-center gap-4 text-sm text-light-500">
+        <header className="absolute top-6 right-6 z-50 flex items-center gap-4 text-sm text-mute">
           <Link href="/privacy" className="hover:underline">
             Privacy Policy
           </Link>
-          <span className="text-light-600">|</span>
+          <span className="text-relief">|</span>
           <Link href="/how-it-works" className="hover:underline">
             How it works
           </Link>

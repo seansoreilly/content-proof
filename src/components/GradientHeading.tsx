@@ -1,17 +1,15 @@
-"use client";
-import { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 
+// Deprecated stub: use a plain h1 in the Seal theme. Remove once the pages
+// that still import it are migrated.
 interface GradientHeadingProps {
   children: ReactNode;
-  /** Additional Tailwind classes (e.g., text size, margin, alignment) */
   className?: string;
 }
 
 export default function GradientHeading({
   children,
   className = "",
-}: GradientHeadingProps) {
-  return (
-    <h1 className={`text-blue-600 font-extrabold ${className}`}>{children}</h1>
-  );
+}: GradientHeadingProps): ReactElement {
+  return <h1 className={`font-display ${className}`}>{children}</h1>;
 }

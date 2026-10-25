@@ -1,22 +1,12 @@
-"use client";
-
+// Deprecated stub: the Seal theme has no animated background. Remove once
+// the pages that still import it are migrated.
 interface AnimatedBackgroundProps {
-  /**
-   * Array of extra Tailwind classes for each orb.
-   * Provide width/height, background color & position classes.
-   */
-  orbs: string[];
+  orbs?: string[];
 }
 
-export default function AnimatedBackground({ orbs }: AnimatedBackgroundProps) {
-  return (
-    <div className="absolute inset-0 -z-10 pointer-events-none">
-      {orbs.map((cls, idx) => (
-        <div
-          key={idx}
-          className={`animate-float rounded-full absolute opacity-30 ${cls}`}
-        />
-      ))}
-    </div>
-  );
+export default function AnimatedBackground(
+  props: AnimatedBackgroundProps,
+): null {
+  void props;
+  return null;
 }
