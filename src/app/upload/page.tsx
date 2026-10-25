@@ -25,15 +25,24 @@ export default async function UploadPage(): Promise<ReactElement> {
           <SignInButton callbackUrl="/upload" />
         </Panel>
       )}
-      <p className="mt-8 max-w-[60ch] text-mute">
-        Your file never leaves this browser. Only its SHA-256 fingerprint is
-        signed, first by this browser&apos;s key and then by ContentProof.
-      </p>
-      <p className="mt-4 max-w-[60ch] text-mute">
-        Each record is also appended to ContentProof&apos;s public, permanent
-        transparency log. The log feed shows only hashes, times and key ids, but
-        anyone holding your link or seal sees your email.
-      </p>
+      <div className="mt-8 flex max-w-[60ch] flex-col gap-3 text-mute">
+        <p>
+          Sign the file you already have. It is not uploaded, and there is
+          nothing to download back: this browser reads it, computes its
+          SHA-256 fingerprint, and only that fingerprint is signed, first by
+          this browser&apos;s key and then by ContentProof.
+        </p>
+        <p>
+          The only thing you download is the seal. Keep your original file
+          unchanged, because whoever verifies the seal needs that exact file.
+          A re-saved, converted or compressed copy will not match.
+        </p>
+        <p>
+          Each record is also appended to ContentProof&apos;s public, permanent
+          transparency log. The log feed shows only hashes, times and key ids,
+          but anyone holding your link or seal sees your email.
+        </p>
+      </div>
     </div>
   );
 }

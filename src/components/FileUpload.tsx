@@ -10,6 +10,7 @@ import { getOrCreateUserKey, type UserSigningKey } from "@/lib/user-keys";
 import { trackSignFile } from "@/lib/analytics";
 import { Eyebrow } from "@/components/ui";
 import { SignInButton } from "@/components/SignInButton";
+import { DropSeal } from "@/components/DropSeal";
 
 interface HashResult {
   fileName: string;
@@ -37,8 +38,6 @@ export default function FileUpload(): React.JSX.Element {
   const { data: session } = useSession();
 
   const inputRef = useRef<HTMLInputElement | null>(null);
-  // dragenter/dragleave also fire for child elements; count them so the highlight does not flicker.
-  const dragDepth = useRef(0);
 
   // This browser's own signing key (created on first use, never leaves the device).
   // The promise is kept so a file dropped before the key resolves still waits
@@ -140,15 +139,15 @@ export default function FileUpload(): React.JSX.Element {
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    dragDepth.current += 1;
     setDragActive(true);
   };
 
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    dragDepth.current = Math.max(0, dragDepth.current - 1);
-    if (dragDepth.current === 0) setDragActive(false);
+    // Moving onto a child of the zone fires dragleave too; only a real exit counts.
+    if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+    setDragActive(false);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -159,7 +158,6 @@ export default function FileUpload(): React.JSX.Element {
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    dragDepth.current = 0;
     setDragActive(false);
     void handleFiles(e.dataTransfer.files);
   };
@@ -176,21 +174,25 @@ export default function FileUpload(): React.JSX.Element {
   };
 
   const busy = stage !== "idle";
+  const stageLabel = stage === "hashing" ? "Hashing" : "Signing";
 
   return (
     <div className="w-full space-y-6">
       <div
         role="button"
         tabIndex={0}
-        className={`flex cursor-pointer flex-col items-center justify-center gap-2 p-6 text-center shadow-pressed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:p-8 ${
+        aria-label="Choose a file to sign"
+        aria-disabled={busy}
+        className={`group flex flex-col items-center gap-5 px-5 py-7 text-center shadow-pressed transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:flex-row sm:gap-8 sm:px-8 sm:py-9 sm:text-left ${
           dragActive ? "bg-tint" : "bg-paper"
-        }`}
+        } ${busy ? "cursor-progress" : "cursor-pointer"}`}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        onClick={onButtonClick}
+        onClick={busy ? undefined : onButtonClick}
         onKeyDown={(e) => {
+          if (busy) return;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             onButtonClick();
@@ -199,19 +201,34 @@ export default function FileUpload(): React.JSX.Element {
       >
         <input id="fileInput" type="file" ref={inputRef} className="hidden" onChange={onFileChange} />
 
-        <Eyebrow>Choose a file</Eyebrow>
-        <p>{dragActive ? "Drop your file here" : "Drag a file here, or click to browse."}</p>
-        <p className="text-sm text-mute">
-          Any file type up to {MAX_FILE_SIZE_LABEL}. The file never leaves your browser; only its
-          fingerprint is sent.
-        </p>
-      </div>
+        <DropSeal
+          state={busy ? "busy" : dragActive ? "over" : "idle"}
+          rimText={`${busy ? stageLabel : "Unsealed · awaiting a file"} · `.repeat(busy ? 4 : 2)}
+        />
 
-      {busy && (
-        <p className="text-mute" role="status">
-          {stage === "hashing" ? "Hashing…" : "Signing…"}
-        </p>
-      )}
+        <div className="min-w-0 space-y-2">
+          <p className="font-display text-[22px] font-bold uppercase leading-none tracking-[-0.01em] sm:text-[26px]">
+            {busy ? `${stageLabel}…` : dragActive ? "Release to sign" : "Drop a file to sign it"}
+          </p>
+          {busy ? (
+            <p className="text-mute" role="status">
+              {stage === "hashing"
+                ? "Reading the file in this browser."
+                : "Sending the fingerprint for countersignature."}
+            </p>
+          ) : (
+            <p className="text-mute">
+              or{" "}
+              <span className="text-accent underline decoration-1 underline-offset-[3px] group-hover:decoration-2">
+                choose one from your device
+              </span>
+            </p>
+          )}
+          <p className="font-mono text-[12px] uppercase tracking-[0.08em] text-mute">
+            Any type · up to {MAX_FILE_SIZE_LABEL}
+          </p>
+        </div>
+      </div>
 
       {note && <p className="text-sm text-mute">{note}</p>}
 
@@ -259,7 +276,7 @@ export default function FileUpload(): React.JSX.Element {
 
       {record && <QrCodeGenerator record={record} />}
 
-      <div className="space-y-2" data-testid="user-key">
+      <div className="space-y-2 pt-2" data-testid="user-key">
         {userKey === "unsupported" ? (
           <p className="text-sm text-mute">
             This browser cannot hold a signing key, so records are service attestations only. A current
