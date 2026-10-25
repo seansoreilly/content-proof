@@ -155,8 +155,9 @@ export const QrCodeGenerator: React.FC<Props> = ({ record, size = 288 }) => {
 
       <p className="max-w-[60ch] text-sm text-mute">
         Anyone with this seal or link can confirm that this account submitted
-        this exact file at this time. The record stays in the link; nothing is
-        looked up on our servers except our published keys.
+        this exact file at this time. The record stays in the link; verifying it
+        fetches our published keys and asks our transparency log for an
+        inclusion proof.
       </p>
       <p className="max-w-[60ch] text-sm text-mute">
         ContentProof does not keep a copy of your file. Send the original file

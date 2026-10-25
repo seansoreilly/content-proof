@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { useSession } from "next-auth/react";
 import { QrCodeGenerator } from "@/components/QrCodeGenerator";
 import { MAX_FILE_SIZE_BYTES, sha256Hash } from "@/lib/hash";
 import { buildSignedMessage, parseRecordObject, type SignatureRecord } from "@/lib/record";
@@ -25,7 +24,17 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024).toFixed(2)} KB`;
 }
 
-export default function FileUpload(): React.JSX.Element {
+interface FileUploadProps {
+  /**
+   * The signed-in account, from the server session. Passed in rather than read
+   * from useSession() so a file dropped before the client session has loaded
+   * is still signed with the account holder's key (version 3), never silently
+   * downgraded to a service-only record.
+   */
+  email: string;
+}
+
+export default function FileUpload({ email }: FileUploadProps): React.JSX.Element {
   const [dragActive, setDragActive] = useState(false);
   const [hashResult, setHashResult] = useState<HashResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +44,6 @@ export default function FileUpload(): React.JSX.Element {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [record, setRecord] = useState<SignatureRecord | null>(null);
   const [userKey, setUserKey] = useState<UserSigningKey | null | "unsupported">(null);
-  const { data: session } = useSession();
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -103,9 +111,8 @@ export default function FileUpload(): React.JSX.Element {
       // statement the account holder actually made. Falls back to a
       // service-only record when the browser cannot hold a key.
       let payload: Record<string, unknown> = { fileHash: hash };
-      const email = session?.user?.email;
       const key = userKey ?? (await keyPromise.current) ?? "unsupported";
-      if (key !== "unsupported" && email) {
+      if (key !== "unsupported") {
         const timestamp = Date.now();
         const userSignature = await key.sign(buildSignedMessage(hash, email, timestamp));
         payload = { fileHash: hash, timestamp, userPublicKey: key.publicKey, userSignature };

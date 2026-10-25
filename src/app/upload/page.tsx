@@ -14,9 +14,9 @@ export default async function UploadPage(): Promise<ReactElement> {
   return (
     <div className="mx-auto w-full max-w-[42rem] px-4 py-10 sm:py-16">
       <h1 className="mb-8">Sign a file</h1>
-      {session ? (
+      {session?.user?.email ? (
         <Panel>
-          <FileUpload />
+          <FileUpload email={session.user.email} />
         </Panel>
       ) : (
         <Panel className="flex flex-col items-start gap-4">
