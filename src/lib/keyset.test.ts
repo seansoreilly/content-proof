@@ -3,6 +3,7 @@ import {
   findPublicKey,
   isKnownPublicKey,
   keyIdFromSpkiBase64,
+  parsePublicKeysJson,
   type PublicKeysJson,
 } from "@/lib/keyset";
 import { makeKeyPair } from "@/test/fixtures";
@@ -38,5 +39,24 @@ describe("keyset (browser-safe helpers)", () => {
   it("recognises a raw public key only when it is published", () => {
     expect(isKnownPublicKey(keys, a.publicKeyBase64)).toBe(true);
     expect(isKnownPublicKey(keys, b.publicKeyBase64)).toBe(false);
+  });
+});
+
+describe("parsePublicKeysJson", () => {
+  const a = makeKeyPair();
+  const id = keyIdFromSpkiBase64(a.publicKeyBase64);
+  const entry = { keyId: id, algorithm: "Ed25519", publicKey: a.publicKeyBase64 };
+
+  it("accepts a consistent document", () => {
+    expect(parsePublicKeysJson({ current: id, keys: { [id]: entry } })?.current).toBe(id);
+  });
+
+  it("rejects an empty key set", () => {
+    expect(parsePublicKeysJson({ current: id, keys: {} })).toBeNull();
+  });
+
+  it("rejects a current id that is not among the keys", () => {
+    expect(parsePublicKeysJson({ current: "nope", keys: { [id]: entry } })).toBeNull();
+    expect(parsePublicKeysJson({ current: "toString", keys: { [id]: entry } })).toBeNull();
   });
 });

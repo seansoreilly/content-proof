@@ -1,0 +1,5 @@
+Contact: mailto:seansoreilly@gmail.com
+Expires: 2027-10-25T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://www.contentproof.app/.well-known/security.txt
+Policy: https://www.contentproof.app/privacy

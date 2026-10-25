@@ -109,8 +109,14 @@ Optional endpoints:
 - `GET /api/sig/<signature>` returns the stored record `{v,h,e,t,s,k}` when
   storage is configured. The core flow does not need it. `/sig/<signature>` is
   the human-readable page for the same record.
-- `POST /api/verify` with JSON `{h,e,t,s,k}` returns `{valid, keyId}` for
-  server-side verification. Rate limited.
+- `POST /api/verify` with JSON `{v,k,h,e,t,s}` (plus `u`,`us` for version 3)
+  returns `{valid, keyId, userSigned, userKey, reason}` for server-side
+  verification. `v` and `t` must be JSON numbers. Rate limited, CORS enabled.
+
+Unknown `/api/*` paths return a JSON 404. Every response carries a
+Content-Security-Policy and the usual security headers (`next.config.ts`),
+and the retired `*.vercel.app` production hostnames redirect to
+`www.contentproof.app`.
 
 The verify page also accepts a photo or screenshot of a QR code and decodes it
 in the browser.
@@ -125,10 +131,20 @@ built over it and the service signs the tree head with its current key.
 - `GET /api/log/head` → `{size, root, timestamp, keyId, signature}` where
   `signature` is Ed25519 over the UTF-8 string
   `contentproof-log/v1\n<size>\n<root>\n<timestamp>`.
-- `GET /api/log/entries?from=0&limit=100` → a page of encoded records, so the
-  whole log can be mirrored and the root recomputed.
+- `GET /api/log/entries?from=0&limit=100` → `{from, limit, size, entries[]}`
+  where each entry is `{index, leafHash, h, t, k, v}`: the Merkle leaf hash,
+  the file hash, the time, the service key id and the record version. The
+  feed deliberately omits emails, account holder keys and signatures so it
+  cannot be used to enumerate who signed what, but the leaf hashes let anyone
+  mirror the log and recompute the root. Whoever holds a record can check it
+  against `leafHash` (`SHA-256(0x00 || encoded record)`).
 - `GET /api/log/proof?index=N` or `?signature=<s>` → an inclusion proof
-  `{index, size, root, leaf, proof[]}` (audit path, hex, leaf to root).
+  `{index, size, root, leafHash, proof[], head}` (audit path, hex, leaf to
+  root). `head` is a signed tree head over exactly that tree, so a proof
+  verifies on its own: walk the path to `root`, then check `head.signature`
+  and that `head.size` and `head.root` match.
+
+All three are rate limited per client IP and answer with permissive CORS.
 
 What this gives you: the service cannot quietly remove, alter or back-date a
 record once a tree head covering it has been seen by anyone. The verify page

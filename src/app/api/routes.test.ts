@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { jsonRequest, makeKeyPair, sha256Hex, stubServerKeys } from "@/test/fixtures";
 import { keyIdFromSpkiBase64 } from "@/lib/keyset";
-import { buildSignedMessage, hashHexToB64url, type SignatureRecord } from "@/lib/record";
+import { buildSignedMessage, decodeRecord, encodeRecord, hashHexToB64url, type SignatureRecord } from "@/lib/record";
+import { base64ToBytes, bytesToHex, toBase64Url } from "@/lib/base64";
 import { createMemoryStore } from "@/lib/rate-limit";
 import { createMemoryLogStore } from "@/lib/log-store";
-import { verifyLogHead, verifyRecordInclusion, type InclusionProofResponse, type SignedLogHead } from "@/lib/log-verify";
+import { recordLeafHash, verifyInclusionProof, verifyLogHead, verifyRecordInclusion, type InclusionProofResponse, type SignedLogHead } from "@/lib/log-verify";
 import { parsePublicKeysJson } from "@/lib/keyset";
 
 const session = { user: { email: "signer@gmail.com" } as { email: string } | null };
@@ -60,28 +61,163 @@ describe("API routes", () => {
     }
 
     const keys = parsePublicKeysJson(await (await wellKnown.GET()).json())!;
-    const head = (await (await logHead.GET()).json()) as SignedLogHead;
+    const head = (await (await logHead.GET(new Request("http://t/api/log/head"))).json()) as SignedLogHead;
     expect(head.size).toBe(4);
     expect(verifyLogHead(head, keys)).toBe(true);
 
-    const page = (await (await logEntries.GET(new Request("http://t/api/log/entries?from=1&limit=2"))).json()) as {
+    const pageRes = await logEntries.GET(new Request("http://t/api/log/entries?from=1&limit=2"));
+    const page = (await pageRes.json()) as {
+      from: number;
+      limit: number;
       size: number;
-      entries: string[];
+      entries: Array<Record<string, unknown>>;
     };
-    expect(page.size).toBe(4);
+    expect(page).toMatchObject({ from: 1, limit: 2, size: 4 });
     expect(page.entries).toHaveLength(2);
+    expect(page.entries[0]).toEqual({
+      index: 1,
+      leafHash: bytesToHex(recordLeafHash(issued[1])),
+      h: issued[1].h,
+      t: issued[1].t,
+      k: issued[1].k,
+      v: issued[1].v,
+    });
+    // No emails, user keys or signatures anywhere in the public feed
+    const raw = JSON.stringify(page);
+    expect(raw).not.toContain("signer@gmail.com");
+    expect(raw).not.toContain(issued[1].s);
 
     const byIndex = (await (await logProof.GET(new Request("http://t/api/log/proof?index=2"))).json()) as InclusionProofResponse;
-    expect(byIndex.root).toBe(head.root);
+    expect(byIndex.root).toBe(byIndex.head.root);
+    expect(byIndex.head.size).toBe(4);
+    expect(byIndex).not.toHaveProperty("leaf");
     expect(verifyRecordInclusion(issued[2], byIndex)).toBe(true);
     expect(verifyRecordInclusion(issued[1], byIndex)).toBe(false);
+    expect(verifyInclusionProof(issued[2], byIndex, keys)).toBe(true);
+    expect(verifyInclusionProof(issued[1], byIndex, keys)).toBe(false);
 
     const bySig = await logProof.GET(new Request(`http://t/api/log/proof?signature=${issued[3].s}`));
-    expect(verifyRecordInclusion(issued[3], (await bySig.json()) as InclusionProofResponse)).toBe(true);
+    expect(verifyInclusionProof(issued[3], (await bySig.json()) as InclusionProofResponse, keys)).toBe(true);
 
     expect((await logProof.GET(new Request(`http://t/api/log/proof?signature=${"Q".repeat(86)}`))).status).toBe(404);
     expect((await logProof.GET(new Request("http://t/api/log/proof"))).status).toBe(400);
     expect((await logEntries.GET(new Request("http://t/api/log/entries?from=-1"))).status).toBe(400);
+  });
+
+  it("parses log query strings strictly and echoes the effective limit", async () => {
+    const { logEntries, logProof } = await routes();
+    const entries = async (qs: string): Promise<Response> => logEntries.GET(new Request(`http://t/api/log/entries${qs}`));
+    for (const bad of ["?from=", "?from=%20", "?from=0x10", "?from=1e9", "?from=-1", "?from=abc", "?limit=0", "?limit=", "?limit=1.5"]) {
+      const res = await entries(bad);
+      expect(res.status, bad).toBe(400);
+      expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    }
+    expect(await (await entries("")).json()).toMatchObject({ from: 0, limit: 100, entries: [] });
+    expect(await (await entries("?limit=99999")).json()).toMatchObject({ limit: 500 });
+
+    const proof = async (qs: string): Promise<Response> => logProof.GET(new Request(`http://t/api/log/proof${qs}`));
+    for (const bad of ["?index=", "?index=%20", "?index=0x10", "?index=1e9", "?index=-1", "?index=abc"]) {
+      expect((await proof(bad)).status, bad).toBe(400);
+    }
+    const both = await proof(`?index=0&signature=${"Q".repeat(86)}`);
+    expect(both.status).toBe(400);
+    expect(await both.json()).toEqual({ error: "Provide index or signature, not both" });
+  });
+
+  it("rate limits the log endpoints per client IP with rate-limit headers", async () => {
+    const { logHead, logEntries, logProof } = await routes();
+    const hit = (fn: (r: Request) => Promise<Response>, path: string, ip: string): Promise<Response> =>
+      fn(new Request(`http://t${path}`, { headers: { "x-forwarded-for": ip } }));
+
+    const cases: Array<[(r: Request) => Promise<Response>, string, number]> = [
+      [logHead.GET, "/api/log/head", 60],
+      [logProof.GET, "/api/log/proof?index=0", 60],
+      [logEntries.GET, "/api/log/entries", 30],
+    ];
+    for (const [fn, path, limit] of cases) {
+      for (let i = 0; i < limit; i++) expect((await hit(fn, path, "198.51.100.1")).status, path).not.toBe(429);
+      const blocked = await hit(fn, path, "198.51.100.1");
+      expect(blocked.status, path).toBe(429);
+      expect(blocked.headers.get("retry-after")).toBe("60");
+      expect(blocked.headers.get("x-ratelimit-limit")).toBe(String(limit));
+      expect(blocked.headers.get("x-ratelimit-remaining")).toBe("0");
+      expect(blocked.headers.get("access-control-allow-origin")).toBe("*");
+      expect(await blocked.json()).toEqual({ error: "Too many requests" });
+      // another client is unaffected
+      expect((await hit(fn, path, "198.51.100.2")).status, path).not.toBe(429);
+    }
+  });
+
+  it("serves CORS on success and error responses and answers preflight", async () => {
+    const { verify, lookup, logHead, logEntries, logProof, wellKnown } = await routes();
+    const cors = (res: Response): string | null => res.headers.get("access-control-allow-origin");
+
+    expect(cors(await verify.POST(jsonRequest("http://t/api/verify", { nope: 1 })))).toBe("*");
+    expect(cors(await verify.POST(new Request("http://t/api/verify", { method: "POST", body: "not json" })))).toBe("*");
+    expect(cors(await lookup.GET(new Request("http://t"), { params: Promise.resolve({ signature: "bad" }) }))).toBe("*");
+    expect(cors(await lookup.GET(new Request("http://t"), { params: Promise.resolve({ signature: "A".repeat(86) }) }))).toBe("*");
+    expect(cors(await logHead.GET(new Request("http://t/api/log/head")))).toBe("*");
+    expect(cors(await logEntries.GET(new Request("http://t/api/log/entries?from=-1")))).toBe("*");
+    expect(cors(await logProof.GET(new Request("http://t/api/log/proof")))).toBe("*");
+    expect(cors(await logProof.GET(new Request("http://t/api/log/proof?index=9")))).toBe("*");
+    expect(cors(await wellKnown.GET())).toBe("*");
+
+    for (const handler of [verify.OPTIONS, lookup.OPTIONS, logHead.OPTIONS, logEntries.OPTIONS, logProof.OPTIONS, wellKnown.OPTIONS]) {
+      const res = handler();
+      expect(res.status).toBe(204);
+      expect(cors(res)).toBe("*");
+      expect(res.headers.get("access-control-allow-headers")).toBe("Content-Type");
+      expect(res.headers.get("access-control-max-age")).toBe("86400");
+    }
+  });
+
+  it("does not add CORS to the same-origin sign endpoint", async () => {
+    const { sign } = await routes();
+    const res = await sign.POST(jsonRequest("http://t/api/sign", { fileHash: fileHex }));
+    expect(res.headers.get("access-control-allow-origin")).toBeNull();
+    expect("OPTIONS" in sign).toBe(false);
+  });
+
+  it("returns a JSON 404 for unknown API paths on every method", async () => {
+    const catchAll = await import("@/app/api/[...rest]/route");
+    for (const handler of [catchAll.GET, catchAll.POST, catchAll.PUT, catchAll.PATCH, catchAll.DELETE, catchAll.OPTIONS]) {
+      const res = handler();
+      expect(res.status).toBe(404);
+      expect(res.headers.get("content-type")).toContain("application/json");
+      expect(await res.json()).toEqual({ error: "Not found" });
+    }
+  });
+
+  it("refuses a service key (current or previous) as the user key", async () => {
+    const previous = makeKeyPair();
+    vi.stubEnv("ED25519_PUBLIC_KEYS_PREVIOUS", previous.publicKeyBase64);
+    const { sign } = await routes();
+    const rawOf = (spkiBase64: string): string => toBase64Url(base64ToBytes(spkiBase64).slice(-32));
+    const timestamp = Date.now();
+    for (const spki of [process.env.ED25519_PUBLIC_KEY ?? "", previous.publicKeyBase64]) {
+      const res = await sign.POST(
+        jsonRequest("http://t/api/sign", {
+          fileHash: fileHex,
+          timestamp,
+          userPublicKey: rawOf(spki),
+          userSignature: "A".repeat(86),
+        })
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "User key must not be a service key" });
+    }
+    expect(await log.size()).toBe(0);
+  });
+
+  it("rejects string-typed t and v in a JSON verify body but still decodes the wire format", async () => {
+    const { sign, verify } = await routes();
+    const { record } = (await (await sign.POST(jsonRequest("http://t/api/sign", { fileHash: fileHex }))).json()) as {
+      record: SignatureRecord;
+    };
+    expect((await verify.POST(jsonRequest("http://t/api/verify", { ...record, t: String(record.t) }))).status).toBe(400);
+    expect((await verify.POST(jsonRequest("http://t/api/verify", { ...record, v: "2" }))).status).toBe(400);
+    expect((await verify.POST(jsonRequest("http://t/api/verify", record))).status).toBe(200);
+    expect(decodeRecord(encodeRecord(record))).toEqual(record);
   });
 
   it("signs a hash for the logged-in user and returns a v2 record", async () => {

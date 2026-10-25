@@ -13,7 +13,14 @@ export const isDebugAuthEnabled: boolean =
 
 const debugEmail = process.env.DEBUG_AUTH_EMAIL ?? "debug@example.com";
 
+/** Google's OIDC profile carries `email_verified`; anything else is not trusted. */
+function hasVerifiedEmail(profile: unknown): boolean {
+  if (typeof profile !== "object" || profile === null || !("email_verified" in profile)) return false;
+  return profile.email_verified === true;
+}
+
 export const authOptions: NextAuthOptions = {
+  pages: { signIn: "/auth/signin", error: "/auth/error" },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
@@ -36,7 +43,8 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
   },
   callbacks: {
-    async signIn({ user }) {
+    async signIn({ user, account, profile }) {
+      if (account?.provider === "google" && !hasVerifiedEmail(profile)) return false;
       return isAllowedEmail(user.email);
     },
     async jwt({ token, user }) {

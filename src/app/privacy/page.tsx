@@ -3,7 +3,7 @@ import path from "path";
 import { marked } from "marked";
 
 export const metadata = {
-  title: "Privacy · ContentProof",
+  title: "Privacy",
 };
 
 export default async function PrivacyPage() {

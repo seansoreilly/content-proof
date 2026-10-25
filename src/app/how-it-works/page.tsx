@@ -3,7 +3,7 @@ import path from "path";
 import { marked } from "marked";
 
 export const metadata = {
-  title: "How it works · ContentProof",
+  title: "How it works",
 };
 
 export default async function HowItWorksPage() {

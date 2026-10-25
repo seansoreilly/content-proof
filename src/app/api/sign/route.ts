@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
 import { InvalidUserSignatureError, signFileHash, type UserSignature } from "@/lib/crypto/ed25519";
+import { base64ToBytes, toBase64Url } from "@/lib/base64";
+import { buildPublicKeysJson } from "@/lib/keys";
 import { createRateLimiter, rateLimitedResponse } from "@/lib/rate-limit";
 import { isRawPublicKey, isSignatureString } from "@/lib/record";
 import { getCounterStore, getLogStore, getRecordStore } from "@/lib/redis";
@@ -12,11 +14,19 @@ const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 // 30 signatures per account per minute is generous for a human and a hard
 // ceiling for anything scripted.
+const LIMIT = 30;
 const limiter = createRateLimiter(getCounterStore(), {
-  limit: 30,
+  limit: LIMIT,
   windowSeconds: 60,
   prefix: "rl:sign",
 });
+
+/** True when the base64url raw key equals the raw key of any published service key. */
+function isServiceKey(userPublicKey: string): boolean {
+  return Object.values(buildPublicKeysJson().keys).some(
+    (entry) => toBase64Url(base64ToBytes(entry.publicKey).slice(-32)) === userPublicKey
+  );
+}
 
 /**
  * POST /api/sign
@@ -37,8 +47,8 @@ export async function POST(request: Request): Promise<Response> {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { allowed } = await limiter(email.toLowerCase());
-    if (!allowed) return rateLimitedResponse();
+    const decision = await limiter(email.toLowerCase());
+    if (!decision.allowed) return rateLimitedResponse(decision, LIMIT);
 
     let body: unknown;
     try {
@@ -61,6 +71,11 @@ export async function POST(request: Request): Promise<Response> {
     if (input.userPublicKey !== undefined || input.userSignature !== undefined || input.timestamp !== undefined) {
       if (!isRawPublicKey(input.userPublicKey) || !isSignatureString(input.userSignature)) {
         return NextResponse.json({ error: "Invalid user key or signature" }, { status: 400 });
+      }
+      if (isServiceKey(input.userPublicKey)) {
+        // A service signature over `<hash>:<email>:<t>` (v2) must never be
+        // replayable as a "user" signature, so service keys cannot be user keys.
+        return NextResponse.json({ error: "User key must not be a service key" }, { status: 400 });
       }
       if (typeof input.timestamp !== "number" || !Number.isInteger(input.timestamp)) {
         return NextResponse.json({ error: "timestamp must be an integer (ms since epoch)" }, { status: 400 });

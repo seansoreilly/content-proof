@@ -65,9 +65,23 @@ export function getClientIp(request: Request): string {
   return first && first.length > 0 ? first : "unknown";
 }
 
-export function rateLimitedResponse(): Response {
+/**
+ * 429 response. Carries only a generic message, never internals. `extraHeaders`
+ * lets public endpoints add CORS headers so browsers can read the status.
+ */
+export function rateLimitedResponse(
+  decision: RateLimitDecision,
+  limit: number,
+  extraHeaders: Record<string, string> = {}
+): Response {
   return new Response(JSON.stringify({ error: "Too many requests" }), {
     status: 429,
-    headers: { "content-type": "application/json", "retry-after": "60" },
+    headers: {
+      ...extraHeaders,
+      "content-type": "application/json",
+      "retry-after": "60",
+      "x-ratelimit-limit": String(limit),
+      "x-ratelimit-remaining": String(decision.remaining),
+    },
   });
 }

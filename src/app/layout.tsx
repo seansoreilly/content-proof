@@ -27,10 +27,20 @@ const mono = JetBrains_Mono({
   display: "swap",
 });
 
+const DESCRIPTION =
+  "A notary for files. Your browser hashes a file and signs it, ContentProof countersigns who, what and when, and anyone can verify the seal.";
+
 export const metadata: Metadata = {
-  title: "Content Proof",
-  description:
-    "A notary for files. Your browser hashes a file and signs it, ContentProof countersigns who, what and when, and anyone can verify the seal.",
+  metadataBase: new URL("https://www.contentproof.app"),
+  title: { default: "ContentProof", template: "%s – ContentProof" },
+  description: DESCRIPTION,
+  openGraph: {
+    title: "ContentProof",
+    description: DESCRIPTION,
+    siteName: "ContentProof",
+    type: "website",
+    url: "/",
+  },
 };
 
 export default function RootLayout({
@@ -45,17 +55,17 @@ export default function RootLayout({
     >
       <body className="font-body bg-paper text-ink">
         <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-4">
-          <Link href="/" className="flex items-center gap-3 text-ink">
+          <Link href="/" className="-my-2 flex items-center gap-3 py-2 text-ink">
             <SealMark tone="sealed" size={28} label="CP" />
             <span className="font-display font-semibold uppercase tracking-[0.12em]">
               ContentProof
             </span>
           </Link>
           <nav className="flex items-center gap-6 text-sm text-mute">
-            <Link href="/how-it-works" className="hover:text-ink">
+            <Link href="/how-it-works" className="-my-2 py-3 hover:text-ink">
               How it works
             </Link>
-            <Link href="/privacy" className="hover:text-ink">
+            <Link href="/privacy" className="-my-2 py-3 hover:text-ink">
               Privacy
             </Link>
           </nav>

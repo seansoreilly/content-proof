@@ -2,13 +2,13 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { useSession } from "next-auth/react";
 import { QrCodeGenerator } from "@/components/QrCodeGenerator";
 import { MAX_FILE_SIZE_BYTES, sha256Hash } from "@/lib/hash";
 import { buildSignedMessage, parseRecordObject, type SignatureRecord } from "@/lib/record";
 import { getOrCreateUserKey, type UserSigningKey } from "@/lib/user-keys";
 import { trackSignFile } from "@/lib/analytics";
 import { Eyebrow } from "@/components/ui";
+import { SignInButton } from "@/components/SignInButton";
 import { DropSeal } from "@/components/DropSeal";
 
 interface HashResult {
@@ -24,28 +24,40 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024).toFixed(2)} KB`;
 }
 
-export default function FileUpload(): React.JSX.Element {
+interface FileUploadProps {
+  /**
+   * The signed-in account, from the server session. Passed in rather than read
+   * from useSession() so a file dropped before the client session has loaded
+   * is still signed with the account holder's key (version 3), never silently
+   * downgraded to a service-only record.
+   */
+  email: string;
+}
+
+export default function FileUpload({ email }: FileUploadProps): React.JSX.Element {
   const [dragActive, setDragActive] = useState(false);
   const [hashResult, setHashResult] = useState<HashResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [needsSignIn, setNeedsSignIn] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const [stage, setStage] = useState<"idle" | "hashing" | "signing">("idle");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [record, setRecord] = useState<SignatureRecord | null>(null);
   const [userKey, setUserKey] = useState<UserSigningKey | null | "unsupported">(null);
-  const { data: session } = useSession();
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // This browser's own signing key (created on first use, never leaves the device).
+  // The promise is kept so a file dropped before the key resolves still waits
+  // for it instead of silently producing a service-only record.
+  const keyPromise = useRef<Promise<UserSigningKey | "unsupported"> | null>(null);
   useEffect(() => {
     let cancelled = false;
-    getOrCreateUserKey()
-      .then((key) => {
-        if (!cancelled) setUserKey(key);
-      })
-      .catch(() => {
-        if (!cancelled) setUserKey("unsupported");
-      });
+    const promise = getOrCreateUserKey().catch((): "unsupported" => "unsupported");
+    keyPromise.current = promise;
+    void promise.then((key) => {
+      if (!cancelled) setUserKey(key);
+    });
     return () => {
       cancelled = true;
     };
@@ -54,6 +66,8 @@ export default function FileUpload(): React.JSX.Element {
   const resetState = () => {
     setHashResult(null);
     setError(null);
+    setNeedsSignIn(false);
+    setNote(null);
     setPreviewUrl((old) => {
       if (old) URL.revokeObjectURL(old);
       return null;
@@ -76,6 +90,7 @@ export default function FileUpload(): React.JSX.Element {
     resetState();
 
     const file = files[0];
+    if (files.length > 1) setNote(`Only the first file, ${file.name}, was used.`);
     const validationError = validateFile(file);
     if (validationError) {
       setError(validationError);
@@ -96,11 +111,11 @@ export default function FileUpload(): React.JSX.Element {
       // statement the account holder actually made. Falls back to a
       // service-only record when the browser cannot hold a key.
       let payload: Record<string, unknown> = { fileHash: hash };
-      const email = session?.user?.email;
-      if (userKey && userKey !== "unsupported" && email) {
+      const key = userKey ?? (await keyPromise.current) ?? "unsupported";
+      if (key !== "unsupported") {
         const timestamp = Date.now();
-        const userSignature = await userKey.sign(buildSignedMessage(hash, email, timestamp));
-        payload = { fileHash: hash, timestamp, userPublicKey: userKey.publicKey, userSignature };
+        const userSignature = await key.sign(buildSignedMessage(hash, email, timestamp));
+        payload = { fileHash: hash, timestamp, userPublicKey: key.publicKey, userSignature };
       }
       const res = await fetch("/api/sign", {
         method: "POST",
@@ -108,7 +123,10 @@ export default function FileUpload(): React.JSX.Element {
         body: JSON.stringify(payload),
       });
 
-      if (res.status === 401) throw new Error("Please sign in before signing a file.");
+      if (res.status === 401) {
+        setNeedsSignIn(true);
+        throw new Error("Please sign in before signing a file.");
+      }
       if (res.status === 429) throw new Error("Too many signing requests. Please wait a minute and try again.");
       if (!res.ok) throw new Error(`Signing failed (${res.status}).`);
 
@@ -156,7 +174,10 @@ export default function FileUpload(): React.JSX.Element {
   };
 
   const onFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+    // handleFiles reads the file before its first await, so the input can be
+    // cleared right away; that lets choosing the same file again fire change.
     void handleFiles(e.target.files);
+    e.target.value = "";
   };
 
   const busy = stage !== "idle";
@@ -216,10 +237,15 @@ export default function FileUpload(): React.JSX.Element {
         </div>
       </div>
 
+      {note && <p className="text-sm text-mute">{note}</p>}
+
       {error && (
-        <p className="font-semibold text-void" role="alert">
-          {error}
-        </p>
+        <div className="flex flex-col items-start gap-3">
+          <p className="font-semibold text-void" role="alert">
+            {error}
+          </p>
+          {needsSignIn && <SignInButton />}
+        </div>
       )}
 
       {previewUrl && (

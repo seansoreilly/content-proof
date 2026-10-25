@@ -1,50 +1,58 @@
 import { NextResponse } from "next/server";
+import { corsHeaders, corsPreflight, parseNonNegativeInt } from "@/lib/http";
 import { buildInclusionProof } from "@/lib/log-head";
-import { getLogStore } from "@/lib/redis";
+import { createRateLimiter, getClientIp, rateLimitedResponse } from "@/lib/rate-limit";
+import { getCounterStore, getLogStore } from "@/lib/redis";
 
 const SIGNATURE_RE = /^[A-Za-z0-9_-]{86}$/;
+const LIMIT = 60;
+const limiter = createRateLimiter(getCounterStore(), { limit: LIMIT, windowSeconds: 60, prefix: "rl:log-proof" });
 
 /**
  * GET /api/log/proof?index=N   or   ?signature=<record signature>
- *   →  { index, size, root, leaf, proof[] }
+ *   →  { index, size, root, leafHash, proof[], head }
  *
- * Together with a signed tree head this proves a record is in the log.
+ * `head` is a signed tree head over the same tree as `root`, so the proof is
+ * checkable on its own: audit path to `root`, then the head signature.
  */
 export const dynamic = "force-dynamic";
 
+export function OPTIONS(): Response {
+  return corsPreflight(["GET"]);
+}
+
 export async function GET(request: Request): Promise<Response> {
+  const decision = await limiter(getClientIp(request));
+  if (!decision.allowed) return rateLimitedResponse(decision, LIMIT, corsHeaders());
+
   const url = new URL(request.url);
   const indexParam = url.searchParams.get("index");
   const signature = url.searchParams.get("signature");
+
+  const fail = (error: string, status: number): Response =>
+    NextResponse.json({ error }, { status, headers: corsHeaders() });
+
+  if (indexParam !== null && signature !== null) return fail("Provide index or signature, not both", 400);
 
   try {
     const log = getLogStore();
     let index: number | null = null;
     if (indexParam !== null) {
-      index = Number(indexParam);
-      if (!Number.isInteger(index) || index < 0) {
-        return NextResponse.json({ error: "index must be a non-negative integer" }, { status: 400 });
-      }
+      index = parseNonNegativeInt(indexParam);
+      if (index === null) return fail("index must be a non-negative integer", 400);
     } else if (signature !== null) {
-      if (!SIGNATURE_RE.test(signature)) {
-        return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-      }
+      if (!SIGNATURE_RE.test(signature)) return fail("Invalid signature", 400);
       index = await log.indexOf(signature);
-      if (index === null) {
-        return NextResponse.json({ error: "Record not in log" }, { status: 404 });
-      }
+      if (index === null) return fail("Record not in log", 404);
     } else {
-      return NextResponse.json({ error: "index or signature is required" }, { status: 400 });
+      return fail("index or signature is required", 400);
     }
 
     const proof = await buildInclusionProof(log, index);
-    if (!proof) return NextResponse.json({ error: "No such entry" }, { status: 404 });
-    return NextResponse.json(proof, {
-      status: 200,
-      headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" },
-    });
+    if (!proof) return fail("No such entry", 404);
+    return NextResponse.json(proof, { status: 200, headers: corsHeaders({ "Cache-Control": "no-store" }) });
   } catch (error) {
     console.error("[log/proof] failed", error);
-    return NextResponse.json({ error: "Log unavailable" }, { status: 503 });
+    return fail("Log unavailable", 503);
   }
 }

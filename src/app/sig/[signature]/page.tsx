@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
@@ -6,6 +7,8 @@ import { getLogStore, getRecordStore } from "@/lib/redis";
 import { rimTextFor } from "@/lib/seal-image";
 import { Seal } from "@/components/Seal";
 import { Button, RecordSummary } from "@/components/ui";
+
+export const metadata: Metadata = { title: "Record" };
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +42,7 @@ export default async function RecordPage({
   });
 
   return (
-    <main className="mx-auto flex w-full max-w-[42rem] flex-col items-center gap-8 px-4 py-10 md:py-16">
+    <div className="mx-auto flex w-full max-w-[42rem] flex-col items-center gap-8 px-4 py-10 md:py-16">
       <h1 className="self-start">Record</h1>
 
       <Seal rimText={rimTextFor(record)} size={288}>
@@ -77,6 +80,6 @@ export default async function RecordPage({
           keys at <code className="font-mono">/.well-known/public-keys.json</code>.
         </p>
       </div>
-    </main>
+    </div>
   );
 }

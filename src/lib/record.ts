@@ -52,6 +52,11 @@ const KEY_ID_RE = /^[A-Za-z0-9_-]{16}$/;
 const B64_32_RE = /^[A-Za-z0-9_-]{43}$/;
 const HASH_HEX_RE = /^[0-9a-f]{64}$/i;
 const SIGNATURE_RE = /^[A-Za-z0-9_-]{86}$/;
+// Plain decimal only: no sign, exponent, hex or leading zeros, so one record has one encoding.
+const DECIMAL_RE = /^(?:0|[1-9]\d{0,15})$/;
+// An address never contains whitespace or control characters; a line break
+// inside a pasted link must not survive into the signed email field.
+const CONTROL_OR_SPACE_RE = /[\s\u0000-\u001f\u007f]/;
 
 export function buildSignedMessage(hashHex: string, email: string, timestamp: number): string {
   return `${hashHex}:${email}:${timestamp}`;
@@ -121,20 +126,21 @@ export function encodeRecord(record: SignatureRecord): string {
 
 /**
  * Validate an untyped object (e.g. a parsed JSON body) as a signature record.
+ * Strict about types: `v` and `t` must already be numbers, with no string
+ * coercion. The wire decoder converts its string fields before calling this.
  */
 export function parseRecordObject(input: unknown): SignatureRecord | null {
   if (!input || typeof input !== "object") return null;
   const o = input as Record<string, unknown>;
-  const vNum = typeof o.v === "number" ? o.v : typeof o.v === "string" ? Number(o.v) : NaN;
   const v: RecordVersion | null =
-    vNum === RECORD_VERSION ? RECORD_VERSION : vNum === RECORD_VERSION_USER_SIGNED ? RECORD_VERSION_USER_SIGNED : null;
-  const t = typeof o.t === "number" ? o.t : typeof o.t === "string" ? Number(o.t) : NaN;
+    o.v === RECORD_VERSION ? RECORD_VERSION : o.v === RECORD_VERSION_USER_SIGNED ? RECORD_VERSION_USER_SIGNED : null;
+  const t = o.t;
   if (
     v === null ||
     typeof o.k !== "string" || !KEY_ID_RE.test(o.k) ||
     typeof o.h !== "string" || !B64_32_RE.test(o.h) ||
-    typeof o.e !== "string" || !o.e.includes("@") || o.e.length > 320 ||
-    !Number.isInteger(t) || t <= 0 ||
+    typeof o.e !== "string" || !o.e.includes("@") || o.e.length > 320 || CONTROL_OR_SPACE_RE.test(o.e) ||
+    typeof t !== "number" || !Number.isSafeInteger(t) || t <= 0 ||
     !isSignatureString(o.s)
   ) {
     return null;
@@ -160,7 +166,16 @@ export function decodeRecord(payload: string): SignatureRecord | null {
   } catch {
     return null;
   }
-  return parseRecordObject(parts.length === 8 ? { v, k, h, e, t, s, u, us } : { v, k, h, e, t, s });
+  // The wire format carries numbers as decimal strings; convert them here so
+  // parseRecordObject can stay strict about JSON types.
+  if (!DECIMAL_RE.test(v) || !DECIMAL_RE.test(t)) return null;
+  const vNum = Number(v);
+  const tNum = Number(t);
+  return parseRecordObject(
+    parts.length === 8
+      ? { v: vNum, k, h, e, t: tNum, s, u, us }
+      : { v: vNum, k, h, e, t: tNum, s }
+  );
 }
 
 const FRAGMENT_PARAM = "P";

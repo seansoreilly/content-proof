@@ -180,6 +180,9 @@ h2 {
 .prose :where(a) {
   text-decoration: underline;
   text-underline-offset: 3px;
+  /* Vertical padding on an inline element does not move the line box, but it
+     does grow the tap target to the 44px that touch guidelines ask for. */
+  padding-block: 0.6rem;
 }
 
 .prose :where(code, pre) {

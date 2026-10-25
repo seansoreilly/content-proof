@@ -45,5 +45,7 @@ export function parsePublicKeysJson(input: unknown): PublicKeysJson | null {
     if (entry.algorithm !== "Ed25519" || typeof entry.publicKey !== "string") return null;
     keys[id] = { keyId: id, algorithm: "Ed25519", publicKey: entry.publicKey };
   }
+  if (Object.keys(keys).length === 0) return null;
+  if (!Object.prototype.hasOwnProperty.call(keys, o.current)) return null;
   return { current: o.current, keys };
 }

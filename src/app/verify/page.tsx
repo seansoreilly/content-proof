@@ -1,9 +1,9 @@
 "use client";
 
-import React, { Suspense, useCallback, useEffect, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { sha256Hash } from "@/lib/hash";
+import { MAX_FILE_SIZE_BYTES, sha256Hash } from "@/lib/hash";
 import {
   verifyLegacyPayload,
   verifyRecord,
@@ -11,7 +11,8 @@ import {
   type VerificationResult,
 } from "@/lib/crypto/verify";
 import { loadPublicKeys, type PublicKeysLoad } from "@/lib/keyset-client";
-import { verifyLogHead, verifyRecordInclusion, type InclusionProofResponse, type SignedLogHead } from "@/lib/log-verify";
+import { verifyInclusionProof, type InclusionProofResponse } from "@/lib/log-verify";
+import { formatLocalTime, toIsoUtc } from "@/lib/format-time";
 import { decodeQrFile } from "@/lib/qr-decode";
 import { extractPayloadFromUrl, type SignatureRecord } from "@/lib/record";
 import { parseVerificationInput, type LoadedInput as Loaded } from "@/lib/verify-input";
@@ -28,29 +29,49 @@ type LogStatus =
   | { kind: "unavailable" };
 
 /**
- * Ask the service for an inclusion proof and a signed tree head, then check
- * both locally. A record can be perfectly valid and still absent from the log
- * (storage not configured), which is reported as such rather than as failure.
+ * Ask the service for an inclusion proof and check it locally, including the
+ * signed tree head it carries. A record can be perfectly valid and still absent
+ * from the log (storage not configured), which is reported as such rather than
+ * as failure.
  */
 async function checkLogInclusion(record: SignatureRecord, keys: PublicKeysLoad["keys"]): Promise<LogStatus> {
   try {
-    const proofRes = await fetch(`/api/log/proof?signature=${encodeURIComponent(record.s)}`, { cache: "no-store" });
-    if (proofRes.status === 404) return { kind: "absent" };
-    if (!proofRes.ok) return { kind: "unavailable" };
-    const proof = (await proofRes.json()) as InclusionProofResponse;
-    if (!verifyRecordInclusion(record, proof)) return { kind: "invalid" };
-
-    const headRes = await fetch("/api/log/head", { cache: "no-store" });
-    if (!headRes.ok) return { kind: "unavailable" };
-    const head = (await headRes.json()) as SignedLogHead;
-    // The head may be newer than the proof's tree; only trust a head that is signed
-    // by a published key. A root mismatch with a larger tree is normal growth.
-    if (!verifyLogHead(head, keys)) return { kind: "invalid" };
-    if (head.size === proof.size && head.root !== proof.root) return { kind: "invalid" };
-    return { kind: "included", index: proof.index, size: proof.size };
+    const res = await fetch(`/api/log/proof?signature=${encodeURIComponent(record.s)}`, { cache: "no-store" });
+    if (res.status === 404) return { kind: "absent" };
+    if (!res.ok) return { kind: "unavailable" };
+    const proof = (await res.json()) as InclusionProofResponse;
+    return verifyInclusionProof(record, proof, keys)
+      ? { kind: "included", index: proof.index, size: proof.size }
+      : { kind: "invalid" };
   } catch {
     return { kind: "unavailable" };
   }
+}
+
+const MAX_FILE_SIZE_LABEL = `${Math.round(MAX_FILE_SIZE_BYTES / (1024 * 1024))} MB`;
+
+const HIDDEN_CHARS =/[​-‏‪-‮⁠-⁤⁦-⁩﻿]/g;
+
+/**
+ * An email as it should be read, not as it was typed: bidi overrides and
+ * zero-width characters can make `moc.live@x` look like a trusted address.
+ * They are stripped for display only; verification signs the raw bytes.
+ */
+function DisplayEmail({ email }: { email: string }): React.JSX.Element {
+  const clean = email.replace(HIDDEN_CHARS, "");
+  return (
+    <span className="break-words font-medium">
+      {clean}
+      {clean !== email && <span className="text-void"> (hidden characters removed)</span>}
+    </span>
+  );
+}
+
+/** A record time in the viewer's zone, with the ISO value in `dateTime`. */
+function TimeText({ ms }: { ms: number }): React.JSX.Element {
+  const iso = toIsoUtc(ms);
+  if (!iso) return <span>unknown time</span>;
+  return <time dateTime={iso}>{formatLocalTime(ms)}</time>;
 }
 
 const FAILURE_MESSAGES: Record<VerificationFailure, string> = {
@@ -81,15 +102,40 @@ function VerifyPageContent() {
   const [inputError, setInputError] = useState<string | null>(null);
   const [logStatus, setLogStatus] = useState<LogStatus | null>(null);
   const [decodingQr, setDecodingQr] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
+  // Kept apart from inputError so a later valid selection clears it without
+  // hiding a problem with the record.
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  // Bumped whenever the file or record changes or a check starts, so a slower
+  // earlier check cannot overwrite the current state.
+  const runId = useRef(0);
 
   // The record rides in the URL fragment, which Next's search params cannot see.
+  // Listen for hash changes too, so following a second link in the same tab loads it.
   useEffect(() => {
-    const fromFragment = typeof window !== "undefined" ? extractPayloadFromUrl(window.location.hash) : null;
-    const source = fromFragment ?? (legacyQuery ? `?data=${legacyQuery}` : "");
-    if (!source) return;
-    const parsed = parseInput(source);
-    if (parsed) setLoaded(parsed);
-    else setInputError("The verification link is not valid.");
+    const apply = (): void => {
+      const fromFragment = extractPayloadFromUrl(window.location.hash);
+      const source = fromFragment ?? (legacyQuery ? `?data=${legacyQuery}` : "");
+      if (!source) return;
+      runId.current += 1;
+      setResult(null);
+      setStatus("idle");
+      setLogStatus(null);
+      setVerifiedEmail(null);
+      const parsed = parseInput(source);
+      if (parsed) {
+        setInputError(null);
+        setLoaded(parsed);
+      } else {
+        setLoaded(null);
+        setInputError("The verification link is not valid.");
+      }
+    };
+    apply();
+    window.addEventListener("hashchange", apply);
+    return () => window.removeEventListener("hashchange", apply);
   }, [legacyQuery]);
 
   // Fetch the published keys once; fall back to the cached copy when offline.
@@ -119,13 +165,16 @@ function VerifyPageContent() {
       setInputError("That is not a ContentProof record or verification link.");
       return;
     }
+    runId.current += 1;
     setInputError(null);
     setResult(null);
     setStatus("idle");
+    setLogStatus(null);
     setLoaded(parsed);
   }, [manualInput]);
 
   const clearLoaded = useCallback(() => {
+    runId.current += 1;
     setLoaded(null);
     setManualInput("");
     setResult(null);
@@ -147,6 +196,7 @@ function VerifyPageContent() {
         setInputError(text ? "That QR code is not a ContentProof record." : "No QR code was found in that image.");
         return;
       }
+      runId.current += 1;
       setResult(null);
       setStatus("idle");
       setLogStatus(null);
@@ -159,14 +209,40 @@ function VerifyPageContent() {
   };
 
   const onFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    setFile(e.target.files?.[0] ?? null);
+    runId.current += 1;
+    const chosen = e.target.files?.[0] ?? null;
     setResult(null);
     setStatus("idle");
+    setLogStatus(null);
+    if (chosen && chosen.size > MAX_FILE_SIZE_BYTES) {
+      setFile(null);
+      setFileInputKey((k) => k + 1);
+      setFileError(`Files larger than ${MAX_FILE_SIZE_LABEL} are not supported.`);
+      return;
+    }
+    setFileError(null);
+    setFile(chosen);
   };
+
+  // Remounting the input is the only reliable way to clear a native file field.
+  const clearFile = useCallback(() => {
+    runId.current += 1;
+    setFile(null);
+    setFileError(null);
+    setFileInputKey((k) => k + 1);
+    setResult(null);
+    setStatus("idle");
+    setLogStatus(null);
+  }, []);
 
   const verify = useCallback(async () => {
     if (!loaded || !file || !keys) return;
+    runId.current += 1;
+    const myRun = runId.current;
     if (loaded.kind === "legacy" && !legacyEmail.trim()) {
+      setResult(null);
+      setStatus("idle");
+      setLogStatus(null);
       setInputError("Older records do not carry the signer's address; enter the email used when signing.");
       return;
     }
@@ -174,40 +250,43 @@ function VerifyPageContent() {
     setStatus("verifying");
     try {
       const fileHash = await sha256Hash(file);
+      if (runId.current !== myRun) return;
+      const email = loaded.kind === "record" ? loaded.record.e : legacyEmail.trim();
       const outcome =
         loaded.kind === "record"
           ? verifyRecord(loaded.record, fileHash, keys.keys)
-          : verifyLegacyPayload(loaded.payload, legacyEmail.trim(), fileHash, keys.keys);
+          : verifyLegacyPayload(loaded.payload, email, fileHash, keys.keys);
       trackVerifySignature(outcome.ok ? "success" : "failure");
+      setVerifiedEmail(email);
       setResult(outcome);
       if (outcome.ok && loaded.kind === "record") {
         setLogStatus({ kind: "checking" });
-        void checkLogInclusion(loaded.record, keys.keys).then(setLogStatus);
+        void checkLogInclusion(loaded.record, keys.keys).then((next) => {
+          if (runId.current === myRun) setLogStatus(next);
+        });
       } else {
         setLogStatus(null);
       }
     } catch (err) {
       console.error(err);
-      setResult({ ok: false, reason: "malformed" });
+      if (runId.current === myRun) setResult({ ok: false, reason: "malformed" });
     } finally {
-      setStatus("done");
+      if (runId.current === myRun) setStatus("done");
     }
   }, [loaded, file, keys, legacyEmail]);
 
   const canVerify = Boolean(loaded && file && keys) && status !== "verifying";
-  const attestedFor = loaded?.kind === "record" ? loaded.record.e : legacyEmail.trim();
-  const attestedAt = new Date(
-    loaded?.kind === "record" ? loaded.record.t : loaded?.payload.timestamp ?? 0
-  ).toLocaleString();
+  const attestedFor = verifiedEmail ?? "";
+  const attestedMs = loaded?.kind === "record" ? loaded.record.t : (loaded?.payload.timestamp ?? 0);
 
   return (
-    <main className="mx-auto flex w-full max-w-[42rem] flex-col gap-6 px-4 py-10 md:py-16">
+    <div className="mx-auto flex w-full max-w-[42rem] flex-col gap-6 px-4 py-10 md:py-16">
       <h1>Verify</h1>
 
-      {(inputError || keysError) && (
+      {(inputError || keysError || fileError) && (
         <Panel>
           <p className="font-medium text-void" role="alert">
-            {inputError ?? keysError}
+            {inputError ?? keysError ?? fileError}
           </p>
         </Panel>
       )}
@@ -248,14 +327,16 @@ function VerifyPageContent() {
                   <div className="flex flex-col gap-1">
                     <p>
                       <span className="text-mute">Claims to be for:</span>{" "}
-                      <span className="break-words font-medium">{loaded.record.e}</span>
+                      <DisplayEmail email={loaded.record.e} />
                     </p>
                     <p>
                       <span className="text-mute">At:</span>{" "}
-                      <span className="font-medium">{new Date(loaded.record.t).toLocaleString()}</span>
+                      <span className="font-medium">
+                        <TimeText ms={loaded.record.t} />
+                      </span>
                     </p>
                     <p>
-                      <span className="text-mute">Key:</span>{" "}
+                      <span className="text-mute">Service key id:</span>{" "}
                       <code className="break-all font-mono text-[13px]">{loaded.record.k}</code>
                     </p>
                   </div>
@@ -263,7 +344,9 @@ function VerifyPageContent() {
                   <div className="flex flex-col gap-1">
                     <p>
                       <span className="text-mute">Legacy record from:</span>{" "}
-                      <span className="font-medium">{new Date(loaded.payload.timestamp).toLocaleString()}</span>
+                      <span className="font-medium">
+                        <TimeText ms={loaded.payload.timestamp} />
+                      </span>
                     </p>
                     <p className="text-sm text-mute">
                       Older records do not include the signer&apos;s address, so you will need to enter it.
@@ -285,7 +368,15 @@ function VerifyPageContent() {
         <section className="flex flex-col gap-4">
           <h2 className="eyebrow">Check the file</h2>
 
-          <FileField id="fileInput" label="Select the file to check" onChange={onFileChange} />
+          <FileField key={fileInputKey} id="fileInput" label="Select the file to check" onChange={onFileChange} />
+          {file && (
+            <div className="flex flex-wrap items-center gap-3 text-sm text-mute">
+              <span className="break-all">{file.name}</span>
+              <Button variant="secondary" onClick={clearFile}>
+                Remove file
+              </Button>
+            </div>
+          )}
 
           {loaded?.kind === "legacy" && (
             <TextField
@@ -318,13 +409,13 @@ function VerifyPageContent() {
         {status === "done" && result && (
           <>
             <div className="h-px bg-relief" aria-hidden="true"></div>
-            <section>
+            <section aria-live="polite">
               {result.ok ? (
                 <VerifyResult tone="sealed" title="Attestation verified">
                   <div className="flex flex-col gap-2">
                     <p>
-                      ContentProof attests that <span className="break-words font-medium">{attestedFor}</span>{" "}
-                      submitted this exact file on {attestedAt}.
+                      ContentProof attests that <DisplayEmail email={attestedFor} />{" "}
+                      submitted this exact file on <TimeText ms={attestedMs} />.
                     </p>
                     {result.userSigned ? (
                       <p className="text-sm text-mute" data-testid="user-signature">
@@ -345,7 +436,7 @@ function VerifyPageContent() {
                       <p className="text-sm text-mute" data-testid="log-status">
                         {logStatus.kind === "checking" && "Checking the transparency log…"}
                         {logStatus.kind === "included" &&
-                          `Included in the transparency log as entry ${logStatus.index} of ${logStatus.size}; inclusion proof and signed tree head verified.`}
+                          `Included in the transparency log as entry ${logStatus.index + 1} of ${logStatus.size}; inclusion proof and signed tree head verified.`}
                         {logStatus.kind === "absent" &&
                           "Not present in the transparency log (the service may not have storage configured)."}
                         {logStatus.kind === "invalid" &&
@@ -366,8 +457,10 @@ function VerifyPageContent() {
       </Panel>
 
       <p className="text-sm text-mute">
-        The file and the record stay in your browser. The only request made is for
-        ContentProof&apos;s published keys.
+        The file and the record stay in your browser. The page fetches
+        ContentProof&apos;s published keys and, after a successful check, asks
+        the transparency log for an inclusion proof, which sends the record&apos;s
+        signature. Usage analytics go to Google Analytics.
       </p>
 
       <div>
@@ -375,7 +468,7 @@ function VerifyPageContent() {
           Back to home
         </Button>
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -383,11 +476,11 @@ export default function VerifyPage(): React.JSX.Element {
   return (
     <Suspense
       fallback={
-        <main className="mx-auto w-full max-w-[42rem] px-4 py-10 md:py-16">
+        <div className="mx-auto w-full max-w-[42rem] px-4 py-10 md:py-16">
           <Panel>
             <p className="eyebrow">Loading verification…</p>
           </Panel>
-        </main>
+        </div>
       }
     >
       <VerifyPageContent />

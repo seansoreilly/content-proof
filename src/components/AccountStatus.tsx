@@ -14,8 +14,8 @@ export function AccountStatus(): ReactElement | null {
     return (
       <div className="mt-4 bg-paper p-4 shadow-pressed">
         <p className="text-sm font-semibold text-void">
-          Your account is not authorized to access this application. Please
-          contact support.
+          This account is signed in but not on the allowed list, so it cannot
+          sign files.
         </p>
       </div>
     );
