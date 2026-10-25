@@ -2,6 +2,11 @@
   "name": "web",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@10.9.9",
+  "engines": {
+    "node": ">=22 <23",
+    "npm": "^10"
+  },
   "scripts": {
     "dev": "NODE_OPTIONS='--inspect' next dev --turbopack --hostname 0.0.0.0",
     "build": "next build",
