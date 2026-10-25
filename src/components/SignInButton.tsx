@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui";
 
-export function SignInButton(): ReactElement {
+export function SignInButton({ callbackUrl }: { callbackUrl?: string }): ReactElement {
   return (
     <Button
       onClick={() => {
@@ -13,12 +13,13 @@ export function SignInButton(): ReactElement {
         // provider the button calls.
         if (process.env.NEXT_PUBLIC_DEBUG_AUTH === "true") {
           void signIn("debug", { redirect: false }).then(() => {
-            window.location.reload();
+            if (callbackUrl) window.location.assign(callbackUrl);
+            else window.location.reload();
           });
           return;
         }
 
-        signIn("google");
+        void signIn("google", callbackUrl ? { callbackUrl } : undefined);
       }}
     >
       {/* Google Icon */}

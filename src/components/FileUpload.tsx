@@ -9,6 +9,7 @@ import { buildSignedMessage, parseRecordObject, type SignatureRecord } from "@/l
 import { getOrCreateUserKey, type UserSigningKey } from "@/lib/user-keys";
 import { trackSignFile } from "@/lib/analytics";
 import { Eyebrow } from "@/components/ui";
+import { SignInButton } from "@/components/SignInButton";
 
 interface HashResult {
   fileName: string;
@@ -27,6 +28,8 @@ export default function FileUpload(): React.JSX.Element {
   const [dragActive, setDragActive] = useState(false);
   const [hashResult, setHashResult] = useState<HashResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [needsSignIn, setNeedsSignIn] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const [stage, setStage] = useState<"idle" | "hashing" | "signing">("idle");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [record, setRecord] = useState<SignatureRecord | null>(null);
@@ -34,17 +37,20 @@ export default function FileUpload(): React.JSX.Element {
   const { data: session } = useSession();
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // dragenter/dragleave also fire for child elements; count them so the highlight does not flicker.
+  const dragDepth = useRef(0);
 
   // This browser's own signing key (created on first use, never leaves the device).
+  // The promise is kept so a file dropped before the key resolves still waits
+  // for it instead of silently producing a service-only record.
+  const keyPromise = useRef<Promise<UserSigningKey | "unsupported"> | null>(null);
   useEffect(() => {
     let cancelled = false;
-    getOrCreateUserKey()
-      .then((key) => {
-        if (!cancelled) setUserKey(key);
-      })
-      .catch(() => {
-        if (!cancelled) setUserKey("unsupported");
-      });
+    const promise = getOrCreateUserKey().catch((): "unsupported" => "unsupported");
+    keyPromise.current = promise;
+    void promise.then((key) => {
+      if (!cancelled) setUserKey(key);
+    });
     return () => {
       cancelled = true;
     };
@@ -53,6 +59,8 @@ export default function FileUpload(): React.JSX.Element {
   const resetState = () => {
     setHashResult(null);
     setError(null);
+    setNeedsSignIn(false);
+    setNote(null);
     setPreviewUrl((old) => {
       if (old) URL.revokeObjectURL(old);
       return null;
@@ -75,6 +83,7 @@ export default function FileUpload(): React.JSX.Element {
     resetState();
 
     const file = files[0];
+    if (files.length > 1) setNote(`Only the first file, ${file.name}, was used.`);
     const validationError = validateFile(file);
     if (validationError) {
       setError(validationError);
@@ -96,10 +105,11 @@ export default function FileUpload(): React.JSX.Element {
       // service-only record when the browser cannot hold a key.
       let payload: Record<string, unknown> = { fileHash: hash };
       const email = session?.user?.email;
-      if (userKey && userKey !== "unsupported" && email) {
+      const key = userKey ?? (await keyPromise.current) ?? "unsupported";
+      if (key !== "unsupported" && email) {
         const timestamp = Date.now();
-        const userSignature = await userKey.sign(buildSignedMessage(hash, email, timestamp));
-        payload = { fileHash: hash, timestamp, userPublicKey: userKey.publicKey, userSignature };
+        const userSignature = await key.sign(buildSignedMessage(hash, email, timestamp));
+        payload = { fileHash: hash, timestamp, userPublicKey: key.publicKey, userSignature };
       }
       const res = await fetch("/api/sign", {
         method: "POST",
@@ -107,7 +117,10 @@ export default function FileUpload(): React.JSX.Element {
         body: JSON.stringify(payload),
       });
 
-      if (res.status === 401) throw new Error("Please sign in before signing a file.");
+      if (res.status === 401) {
+        setNeedsSignIn(true);
+        throw new Error("Please sign in before signing a file.");
+      }
       if (res.status === 429) throw new Error("Too many signing requests. Please wait a minute and try again.");
       if (!res.ok) throw new Error(`Signing failed (${res.status}).`);
 
@@ -127,13 +140,15 @@ export default function FileUpload(): React.JSX.Element {
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    dragDepth.current += 1;
     setDragActive(true);
   };
 
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragActive(false);
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragActive(false);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -144,6 +159,7 @@ export default function FileUpload(): React.JSX.Element {
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    dragDepth.current = 0;
     setDragActive(false);
     void handleFiles(e.dataTransfer.files);
   };
@@ -153,7 +169,10 @@ export default function FileUpload(): React.JSX.Element {
   };
 
   const onFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+    // handleFiles reads the file before its first await, so the input can be
+    // cleared right away; that lets choosing the same file again fire change.
     void handleFiles(e.target.files);
+    e.target.value = "";
   };
 
   const busy = stage !== "idle";
@@ -194,10 +213,15 @@ export default function FileUpload(): React.JSX.Element {
         </p>
       )}
 
+      {note && <p className="text-sm text-mute">{note}</p>}
+
       {error && (
-        <p className="font-semibold text-void" role="alert">
-          {error}
-        </p>
+        <div className="flex flex-col items-start gap-3">
+          <p className="font-semibold text-void" role="alert">
+            {error}
+          </p>
+          {needsSignIn && <SignInButton />}
+        </div>
       )}
 
       {previewUrl && (

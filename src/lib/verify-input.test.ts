@@ -31,6 +31,11 @@ describe("verifier input parsing", () => {
     expect(parseVerificationInput(blob)).toEqual({ kind: "legacy", payload: legacy });
   });
 
+  it.each([0, -1, 1e20, 1.5])("rejects a legacy payload with timestamp %s", (timestamp) => {
+    const legacy = { signature: "C".repeat(86), publicKey: "MCowBQYDK2VwAyEA" + "D".repeat(43) + "=", timestamp };
+    expect(parseVerificationInput(stringToBase64Url(JSON.stringify(legacy)))).toBeNull();
+  });
+
   it("returns null for junk", () => {
     expect(parseVerificationInput("")).toBeNull();
     expect(parseVerificationInput("hello there")).toBeNull();

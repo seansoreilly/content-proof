@@ -88,6 +88,9 @@ export default function Landing({
           Verify a file
         </Button>
       </div>
+      {isHydrated && !isSignedIn && (
+        <p className="mt-3 text-sm text-mute">Sign in to sign a file.</p>
+      )}
 
       <div className="mt-16 flex max-w-[60ch] flex-col gap-8 text-left">
         {POINTS.map((p) => (

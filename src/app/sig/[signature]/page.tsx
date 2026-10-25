@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
@@ -6,6 +7,8 @@ import { getLogStore, getRecordStore } from "@/lib/redis";
 import { rimTextFor } from "@/lib/seal-image";
 import { Seal } from "@/components/Seal";
 import { Button, RecordSummary } from "@/components/ui";
+
+export const metadata: Metadata = { title: "Record" };
 
 export const dynamic = "force-dynamic";
 

@@ -13,7 +13,9 @@ function parseLegacy(encoded: string): LegacyPayload | null {
     if (
       typeof parsed.signature === "string" &&
       typeof parsed.publicKey === "string" &&
-      typeof parsed.timestamp === "number"
+      typeof parsed.timestamp === "number" &&
+      Number.isSafeInteger(parsed.timestamp) &&
+      parsed.timestamp > 0
     ) {
       return { signature: parsed.signature, publicKey: parsed.publicKey, timestamp: parsed.timestamp };
     }

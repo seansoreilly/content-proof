@@ -32,7 +32,7 @@ const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isProduction ? "" : " 'unsafe-eval'"} https://www.googletagmanager.com`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com",
+  "img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com https://www.google.com",
   "font-src 'self' data:",
   [
     "connect-src 'self'",
@@ -41,6 +41,8 @@ const contentSecurityPolicy = [
     "https://*.analytics.google.com",
     "https://www.googletagmanager.com",
     "https://*.googletagmanager.com",
+    // GA4 sends some beacons to www.google.com/g/collect
+    "https://www.google.com",
     ...(isProduction ? [] : ["ws:", "wss:"]),
   ].join(" "),
   "worker-src 'self' blob:",

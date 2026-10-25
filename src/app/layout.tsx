@@ -27,10 +27,20 @@ const mono = JetBrains_Mono({
   display: "swap",
 });
 
+const DESCRIPTION =
+  "A notary for files. Your browser hashes a file and signs it, ContentProof countersigns who, what and when, and anyone can verify the seal.";
+
 export const metadata: Metadata = {
-  title: "Content Proof",
-  description:
-    "A notary for files. Your browser hashes a file and signs it, ContentProof countersigns who, what and when, and anyone can verify the seal.",
+  metadataBase: new URL("https://www.contentproof.app"),
+  title: { default: "ContentProof", template: "%s – ContentProof" },
+  description: DESCRIPTION,
+  openGraph: {
+    title: "ContentProof",
+    description: DESCRIPTION,
+    siteName: "ContentProof",
+    type: "website",
+    url: "/",
+  },
 };
 
 export default function RootLayout({
