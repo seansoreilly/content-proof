@@ -3,7 +3,7 @@
 import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { sha256Hash } from "@/lib/hash";
+import { MAX_FILE_SIZE_BYTES, sha256Hash } from "@/lib/hash";
 import {
   verifyLegacyPayload,
   verifyRecord,
@@ -48,7 +48,9 @@ async function checkLogInclusion(record: SignatureRecord, keys: PublicKeysLoad["
   }
 }
 
-const HIDDEN_CHARS = /[​-‏‪-‮⁠-⁤⁦-⁩﻿]/g;
+const MAX_FILE_SIZE_LABEL = `${Math.round(MAX_FILE_SIZE_BYTES / (1024 * 1024))} MB`;
+
+const HIDDEN_CHARS =/[​-‏‪-‮⁠-⁤⁦-⁩﻿]/g;
 
 /**
  * An email as it should be read, not as it was typed: bidi overrides and
@@ -101,6 +103,7 @@ function VerifyPageContent() {
   const [logStatus, setLogStatus] = useState<LogStatus | null>(null);
   const [decodingQr, setDecodingQr] = useState(false);
   const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
 
   // Bumped whenever the file or record changes or a check starts, so a slower
   // earlier check cannot overwrite the current state.
@@ -204,11 +207,28 @@ function VerifyPageContent() {
 
   const onFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     runId.current += 1;
-    setFile(e.target.files?.[0] ?? null);
+    const chosen = e.target.files?.[0] ?? null;
     setResult(null);
     setStatus("idle");
     setLogStatus(null);
+    if (chosen && chosen.size > MAX_FILE_SIZE_BYTES) {
+      setFile(null);
+      setFileInputKey((k) => k + 1);
+      setInputError(`Files larger than ${MAX_FILE_SIZE_LABEL} are not supported.`);
+      return;
+    }
+    setFile(chosen);
   };
+
+  // Remounting the input is the only reliable way to clear a native file field.
+  const clearFile = useCallback(() => {
+    runId.current += 1;
+    setFile(null);
+    setFileInputKey((k) => k + 1);
+    setResult(null);
+    setStatus("idle");
+    setLogStatus(null);
+  }, []);
 
   const verify = useCallback(async () => {
     if (!loaded || !file || !keys) return;
@@ -343,7 +363,15 @@ function VerifyPageContent() {
         <section className="flex flex-col gap-4">
           <h2 className="eyebrow">Check the file</h2>
 
-          <FileField id="fileInput" label="Select the file to check" onChange={onFileChange} />
+          <FileField key={fileInputKey} id="fileInput" label="Select the file to check" onChange={onFileChange} />
+          {file && (
+            <div className="flex flex-wrap items-center gap-3 text-sm text-mute">
+              <span className="break-all">{file.name}</span>
+              <Button variant="secondary" onClick={clearFile}>
+                Remove file
+              </Button>
+            </div>
+          )}
 
           {loaded?.kind === "legacy" && (
             <TextField
