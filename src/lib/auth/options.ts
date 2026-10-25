@@ -1,31 +1,32 @@
-import { NextAuthOptions } from "next-auth";
+import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { isAllowedEmail } from "@/lib/auth/validation";
 
-const isDebugAuth =
-  process.env.DEBUG_AUTH === "true" ||
-  process.env.NEXT_PUBLIC_DEBUG_AUTH === "true";
+/**
+ * The debug provider signs anyone in without a password. It is gated on a
+ * server-only variable AND a non-production build, so no client-exposed
+ * setting or misconfigured preview environment can enable it in production.
+ */
+export const isDebugAuthEnabled: boolean =
+  process.env.NODE_ENV !== "production" && process.env.DEBUG_AUTH === "true";
+
+const debugEmail = process.env.DEBUG_AUTH_EMAIL ?? "debug@example.com";
 
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
     }),
-    // When debug auth is enabled, add a Credentials provider that automatically signs in
-    ...(isDebugAuth
+    ...(isDebugAuthEnabled
       ? [
           CredentialsProvider({
             id: "debug",
             name: "Debug",
             credentials: {},
             async authorize() {
-              return {
-                id: "debug-user",
-                name: "Sean O'Reilly",
-                email: "seansoreilly@gmail.com",
-              };
+              return { id: "debug-user", name: "Debug User", email: debugEmail };
             },
           }),
         ]
@@ -36,16 +37,10 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async signIn({ user }) {
-      // In debug mode, always allow sign-in for the fake user.
-      if (isDebugAuth) {
-        return true;
-      }
       return isAllowedEmail(user.email);
     },
     async jwt({ token, user }) {
-      if (isDebugAuth) {
-        token.allowed = true;
-      } else if (user?.email) {
+      if (user?.email) {
         token.allowed = isAllowedEmail(user.email);
       }
       return token;
@@ -57,4 +52,4 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-}; 
+};

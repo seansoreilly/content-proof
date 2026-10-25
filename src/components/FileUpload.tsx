@@ -1,9 +1,12 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { useSession } from "next-auth/react";
 import { QrCodeGenerator } from "@/components/QrCodeGenerator";
-import { sha256Hash } from "@/lib/hash";
+import { MAX_FILE_SIZE_BYTES, sha256Hash } from "@/lib/hash";
+import { buildSignedMessage, parseRecordObject, type SignatureRecord } from "@/lib/record";
+import { getOrCreateUserKey, type UserSigningKey } from "@/lib/user-keys";
 import { trackSignFile } from "@/lib/analytics";
 
 interface HashResult {
@@ -12,48 +15,56 @@ interface HashResult {
   hash: string;
 }
 
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
-const ALLOWED_MIME_TYPES = [
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "application/pdf",
-  "text/plain",
-  "application/x-zip-compressed",
-];
+const MAX_FILE_SIZE_LABEL = `${Math.round(MAX_FILE_SIZE_BYTES / (1024 * 1024))} MB`;
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / 1024).toFixed(2)} KB`;
+}
 
 export default function FileUpload() {
   const [dragActive, setDragActive] = useState(false);
   const [hashResult, setHashResult] = useState<HashResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [stage, setStage] = useState<"idle" | "hashing" | "signing">("idle");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [signature, setSignature] = useState<
-    import("@/lib/crypto/ed25519").SignatureData | null
-  >(null);
-  const [copied, setCopied] = useState(false);
+  const [record, setRecord] = useState<SignatureRecord | null>(null);
+  const [userKey, setUserKey] = useState<UserSigningKey | null | "unsupported">(null);
+  const { data: session } = useSession();
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Only show sensitive hash details in development or when explicitly enabled
-  const isDebug = process.env.NODE_ENV === "development";
+  // This browser's own signing key (created on first use, never leaves the device).
+  useEffect(() => {
+    let cancelled = false;
+    getOrCreateUserKey()
+      .then((key) => {
+        if (!cancelled) setUserKey(key);
+      })
+      .catch(() => {
+        if (!cancelled) setUserKey("unsupported");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const resetState = () => {
     setHashResult(null);
     setError(null);
-    setPreviewUrl(null);
-    setSignature(null);
-    setCopied(false);
+    setPreviewUrl((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return null;
+    });
+    setRecord(null);
   };
 
-  const validateFile = (file: File) => {
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      return `Unsupported file type: ${file.type}`;
-    }
+  // Any file type is fine: only its hash leaves the browser. The size cap is a
+  // sanity bound, not a memory limit, because hashing is streamed.
+  const validateFile = (file: File): string | null => {
+    if (file.size === 0) return "The selected file is empty.";
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      return `File larger than ${(MAX_FILE_SIZE_BYTES / (1024 * 1024)).toFixed(
-        2
-      )} MB is not allowed`;
+      return `Files larger than ${MAX_FILE_SIZE_LABEL} are not supported.`;
     }
     return null;
   };
@@ -62,7 +73,7 @@ export default function FileUpload() {
     if (!files || files.length === 0) return;
     resetState();
 
-    const file = files[0]; // single file
+    const file = files[0];
     const validationError = validateFile(file);
     if (validationError) {
       setError(validationError);
@@ -73,40 +84,42 @@ export default function FileUpload() {
       setPreviewUrl(URL.createObjectURL(file));
     }
 
-    setLoading(true);
     try {
-      console.log(
-        `Starting file hash generation for: ${file.name} (${file.size} bytes)`
-      );
+      setStage("hashing");
       const hash = await sha256Hash(file);
-      console.log(`Generated hash: ${hash}`);
       setHashResult({ fileName: file.name, fileSize: file.size, hash });
 
-      console.log("Initiating signature request to /api/sign");
+      setStage("signing");
+      // Sign with this browser's key first so the service can countersign a
+      // statement the account holder actually made. Falls back to a
+      // service-only record when the browser cannot hold a key.
+      let payload: Record<string, unknown> = { fileHash: hash };
+      const email = session?.user?.email;
+      if (userKey && userKey !== "unsupported" && email) {
+        const timestamp = Date.now();
+        const userSignature = await userKey.sign(buildSignedMessage(hash, email, timestamp));
+        payload = { fileHash: hash, timestamp, userPublicKey: userKey.publicKey, userSignature };
+      }
       const res = await fetch("/api/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileHash: hash }),
+        body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        console.error(`Signature API failed with status: ${res.status}`);
-        throw new Error(`Signature API error: ${res.status}`);
-      }
+      if (res.status === 401) throw new Error("Please sign in before signing a file.");
+      if (res.status === 429) throw new Error("Too many signing requests. Please wait a minute and try again.");
+      if (!res.ok) throw new Error(`Signing failed (${res.status}).`);
 
-      const data =
-        (await res.json()) as import("@/lib/crypto/ed25519").SignatureData;
-      console.log("Successfully received signature data");
-      setSignature(data);
-
-      console.log("Tracking file signing event");
+      const body = (await res.json()) as { record?: unknown };
+      const signed = parseRecordObject(body.record);
+      if (!signed) throw new Error("The server returned an unexpected response.");
+      setRecord(signed);
       trackSignFile();
     } catch (err) {
-      console.error("File signing process failed:", err);
-      setError("Failed to generate signature.");
+      console.error("File signing failed:", err);
+      setError(err instanceof Error ? err.message : "Failed to generate signature.");
     } finally {
-      console.log("File signing process completed");
-      setLoading(false);
+      setStage("idle");
     }
   };
 
@@ -131,7 +144,7 @@ export default function FileUpload() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    handleFiles(e.dataTransfer.files);
+    void handleFiles(e.dataTransfer.files);
   };
 
   const onButtonClick = () => {
@@ -139,22 +152,13 @@ export default function FileUpload() {
   };
 
   const onFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    handleFiles(e.target.files);
+    void handleFiles(e.target.files);
   };
 
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
-    }
-  };
+  const busy = stage !== "idle";
 
   return (
     <div className="w-full max-w-lg mx-auto p-4">
-      {/* Enhanced Drag & Drop Zone */}
       <div
         className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 backdrop-blur-sm relative overflow-hidden ${
           dragActive
@@ -167,24 +171,15 @@ export default function FileUpload() {
         onDrop={handleDrop}
         onClick={onButtonClick}
       >
-        <input
-          id="fileInput"
-          type="file"
-          ref={inputRef}
-          className="hidden"
-          onChange={onFileChange}
-        />
+        <input id="fileInput" type="file" ref={inputRef} className="hidden" onChange={onFileChange} />
 
-        {/* Upload Icon */}
         <div
           className={`w-12 h-12 mb-4 rounded-full flex items-center justify-center transition-all duration-300 ${
             dragActive ? "bg-accent-blue/20 scale-110" : "bg-white/10"
           }`}
         >
           <svg
-            className={`w-6 h-6 transition-colors duration-300 ${
-              dragActive ? "text-accent-blue" : "text-light-500"
-            }`}
+            className={`w-6 h-6 transition-colors duration-300 ${dragActive ? "text-accent-blue" : "text-light-500"}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -199,207 +194,98 @@ export default function FileUpload() {
         </div>
 
         <p className="text-light-600 text-center mb-2">
-          <span
-            className={`font-semibold transition-colors duration-300 ${
-              dragActive ? "text-accent-blue" : "text-accent-blue"
-            }`}
-          >
+          <span className="font-semibold text-accent-blue">
             {dragActive ? "Drop your file here" : "Drag & drop a file here"}
           </span>
         </p>
 
         <p className="text-light-500 text-sm text-center">
-          or{" "}
-          <span className="font-semibold text-accent-blue hover:text-accent-purple transition-colors cursor-pointer">
-            browse files
-          </span>
+          or <span className="font-semibold text-accent-blue hover:text-accent-purple transition-colors">browse files</span>
         </p>
 
         <p className="text-xs text-light-400 mt-2 text-center">
-          Supports files up to 10MB
+          Any file type up to {MAX_FILE_SIZE_LABEL}. The file never leaves your browser; only its
+          fingerprint is sent.
         </p>
       </div>
 
-      {/* Loading State with Enhanced Spinner */}
-      {loading && (
+      {busy && (
         <div className="glass mt-4 p-4 flex items-center justify-center gap-3">
           <div className="w-5 h-5 border-2 border-accent-blue/30 border-t-accent-blue rounded-full animate-spin"></div>
           <p className="text-accent-blue font-medium">
-            Generating cryptographic signature...
+            {stage === "hashing" ? "Fingerprinting your file…" : "Requesting attestation…"}
           </p>
         </div>
       )}
 
-      {/* Enhanced Error Display */}
       {error && (
         <div className="glass mt-4 p-4 border border-red-400/30 bg-red-400/10">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-red-400 flex items-center justify-center">
-              <svg
-                className="w-3 h-3 text-white"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <p className="text-red-400 font-medium">Error: {error}</p>
-          </div>
+          <p className="text-red-400 font-medium">{error}</p>
         </div>
       )}
 
-      {/* Enhanced Preview Display */}
       {previewUrl && (
         <details className="glass mt-4 p-4">
-          <summary className="cursor-pointer font-medium mb-3 text-light-600 flex items-center gap-2 select-none">
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-              />
-            </svg>
-            Preview (click to reveal)
-          </summary>
+          <summary className="cursor-pointer font-medium text-light-600 select-none">Preview</summary>
           <div className="relative rounded-lg overflow-hidden mt-4">
             <Image
               src={previewUrl}
               alt="File preview"
               width={256}
               height={256}
+              unoptimized
               className="max-h-64 w-full object-contain bg-white/5 rounded-lg"
             />
           </div>
         </details>
       )}
 
-      {/* Enhanced Hash Result Display */}
       {hashResult && (
-        <div className="glass mt-4 p-4 space-y-3">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-5 h-5 rounded-full bg-green-400 flex items-center justify-center">
-              <svg
-                className="w-3 h-3 text-white"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <p className="font-medium text-green-400">File Hash Generated</p>
+        <div className="glass mt-4 p-4 space-y-2 text-sm">
+          <div className="flex justify-between items-center gap-4">
+            <span className="text-light-500">File</span>
+            <span className="font-medium text-light-600 truncate">{hashResult.fileName}</span>
           </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-light-500">File:</span>
-              <span className="font-medium text-light-600 truncate ml-2">
-                {hashResult.fileName}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-light-500">Size:</span>
-              <span className="font-medium text-light-600">
-                {(hashResult.fileSize / 1024).toFixed(2)} KB
-              </span>
-            </div>
+          <div className="flex justify-between items-center">
+            <span className="text-light-500">Size</span>
+            <span className="font-medium text-light-600">{formatSize(hashResult.fileSize)}</span>
           </div>
-
-          {isDebug && (
-            <details className="space-y-2">
-              <summary className="cursor-pointer text-sm font-medium text-light-600 select-none">
-                SHA-256 Hash (click to reveal)
-              </summary>
-              <div className="relative mt-2">
-                <div className="glass p-3 rounded-lg font-mono text-xs text-light-600 break-all pr-12 bg-white/5">
-                  {hashResult.hash}
-                </div>
-                <button
-                  onClick={() => copyToClipboard(hashResult.hash)}
-                  className={`absolute top-2 right-2 p-1.5 rounded-md transition-all duration-200 ${
-                    copied
-                      ? "bg-green-400/20 text-green-400"
-                      : "bg-white/10 text-light-500 hover:bg-white/20 hover:text-accent-blue"
-                  }`}
-                  title={copied ? "Copied!" : "Copy hash"}
-                >
-                  {copied ? (
-                    <svg
-                      className="w-4 h-4"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  ) : (
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
-                    </svg>
-                  )}
-                </button>
-              </div>
-            </details>
-          )}
+          <details>
+            <summary className="cursor-pointer text-light-500 select-none">SHA-256 fingerprint</summary>
+            <code className="block mt-2 p-3 rounded-lg font-mono text-xs text-light-600 break-all bg-white/5">
+              {hashResult.hash}
+            </code>
+          </details>
         </div>
       )}
 
-      {/* Enhanced QR Code Display */}
-      {signature && (
+      {record && (
         <div className="glass mt-4 p-4">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-5 h-5 rounded-full bg-accent-purple flex items-center justify-center">
-              <svg
-                className="w-3 h-3 text-white"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M3 4a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 13a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1v-3zM12 4a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1V4z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <p className="font-medium text-accent-purple">
-              Verification QR Code
-            </p>
-          </div>
-          <QrCodeGenerator signature={signature} />
+          <p className="font-medium text-accent-purple mb-4">Verification QR code</p>
+          <QrCodeGenerator record={record} />
         </div>
       )}
+
+      <div className="glass mt-4 p-4 text-xs text-light-500 space-y-1" data-testid="user-key">
+        {userKey === "unsupported" ? (
+          <p>
+            This browser cannot hold a signing key, so records are service attestations only. A current
+            Chrome, Firefox or Safari adds your own signature.
+          </p>
+        ) : userKey ? (
+          <>
+            <p className="text-light-600 font-medium">Your signing key (this browser)</p>
+            <code className="block break-all">{userKey.publicKey}</code>
+            <p>
+              Records you create here carry a signature made with this key. It never leaves this device.
+              Publish this key where people can find you so they can tie your records to you, not just to
+              your account.
+            </p>
+          </>
+        ) : (
+          <p>Preparing your signing key…</p>
+        )}
+      </div>
     </div>
   );
 }

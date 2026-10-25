@@ -1,0 +1,49 @@
+name: Archive transparency log head
+
+# Fetches the signed Merkle tree head from the deployed service once a day and
+# commits it to this repository. The git history then forms an independent,
+# timestamped archive of the log's growth: any later head whose tree is not an
+# extension of an earlier one proves the log was rewritten.
+#
+# Set the repository variable CONTENTPROOF_BASE_URL (e.g. https://contentproof.app)
+# to enable it. Without it the job exits without doing anything.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch and store the signed tree head
+        env:
+          BASE_URL: ${{ vars.CONTENTPROOF_BASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_URL:-}" ]; then
+            echo "CONTENTPROOF_BASE_URL is not set; nothing to archive."
+            exit 0
+          fi
+          mkdir -p log-heads
+          stamp=$(date -u +%Y-%m-%dT%H-%M-%SZ)
+          curl -fsS "${BASE_URL%/}/api/log/head" -o "log-heads/${stamp}.json"
+          python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert isinstance(d["size"],int) and len(d["root"])==64 and d["signature"]' "log-heads/${stamp}.json"
+          cat "log-heads/${stamp}.json"
+      - name: Commit
+        run: |
+          set -euo pipefail
+          if git status --porcelain log-heads | grep -q .; then
+            git config user.name "contentproof-log-archiver"
+            git config user.email "noreply@github.com"
+            git add log-heads
+            git commit -m "Archive transparency log head $(date -u +%Y-%m-%d)"
+            git push
+          else
+            echo "No new head to commit."
+          fi

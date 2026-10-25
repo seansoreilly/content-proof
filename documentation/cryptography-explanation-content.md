@@ -2,72 +2,79 @@
 
 ## Introduction
 
-Content Proof uses state-of-the-art cryptographic techniques to ensure the authenticity and integrity of your digital files. This page explains the technical foundation of our service in an accessible way.
+Content Proof is an attestation (notary) service. It uses SHA-256 to fingerprint your file in your browser and an Ed25519 digital signature, made by the ContentProof server key, to attest that your Google account submitted that fingerprint at a particular time. This page explains each piece and exactly what the result does and does not prove.
 
-## Digital Signatures Overview
+## The trust model
 
-### What Are Digital Signatures?
+A valid Content Proof record means:
 
-Digital signatures are mathematical schemes that provide:
-- **Authentication**: Proof of who signed the data
-- **Integrity**: Assurance that data hasn't been modified
-- **Non-repudiation**: The signer cannot deny they signed the data
+> The ContentProof service attests that the Google account `<email>` submitted the SHA-256 hash `<hash>` at time `<timestamp>`.
 
-Think of a digital signature like a tamper-evident seal on a package, but mathematically unbreakable.
+Things to understand:
 
-### How They Differ from Encryption
+- **ContentProof signs, not you.** You hold no key. The ContentProof server key signs every record after checking your Google sign-in.
+- **No non-repudiation by the user.** The signature shows what the service attests, not that you personally signed anything.
+- **A verifier trusts ContentProof's published key.** Verification checks the signature against the key set published at `/.well-known/public-keys.json`. If you trust that key and the sign-in check, you can trust the record.
+- **Your file never leaves your browser.** Only its SHA-256 hash is sent to the server.
+- **It is not proof of authorship.** It shows who submitted a hash and when, not who created the file.
 
-| Digital Signatures | Encryption |
+## Digital signatures overview
+
+### What are digital signatures?
+
+A digital signature is a mathematical scheme that lets anyone holding a public key check that a message was signed by the matching private key. It provides:
+
+- **Authentication**: the message came from the holder of the private key. Here, that is the ContentProof service.
+- **Integrity**: the message has not been modified since signing.
+
+### How they differ from encryption
+
+| Digital signatures | Encryption |
 |-------------------|------------|
-| Prove authenticity | Hide information |
-| Anyone can verify | Only intended recipient can read |
-| Detect tampering | Prevent unauthorized access |
+| Prove who signed | Hide information |
+| Anyone can verify | Only the intended recipient can read |
+| Detect tampering with the signed message | Prevent unauthorized access |
 | Public verification | Private communication |
 
-## The Ed25519 Algorithm
+## The Ed25519 algorithm
 
 ### Why Ed25519?
 
-Content Proof uses Ed25519, a modern elliptic curve digital signature algorithm that offers:
+Ed25519 is a modern elliptic curve signature algorithm (RFC 8032) that offers:
 
-**Security Benefits**:
-- Resistant to timing attacks
-- Immune to weak random number generation
-- Mathematically proven security properties
-- Protection against quantum computing advances (for now)
+**Security**
+- Designed to resist timing side channels
+- Deterministic signatures, so weak random number generation cannot leak the key
+- No parameter choices that could weaken security
 
-**Performance Benefits**:
-- Fast signature generation (~0.1ms)
-- Quick verification (~0.3ms)
-- Small signature size (64 bytes)
+**Performance**
+- Fast signing and verification
+- Small signatures (64 bytes)
 - Compact public keys (32 bytes)
 
-**Simplicity Benefits**:
-- No parameter choices that could weaken security
-- Single, well-tested implementation
-- Widely adopted by security-conscious organizations
+Ed25519 is not resistant to large-scale quantum computers. If post-quantum signatures become necessary, the format version field allows moving to a new scheme.
 
-### Ed25519 vs Other Algorithms
+### Ed25519 vs other algorithms
 
-| Algorithm | Signature Size | Security Level | Speed |
-|-----------|---------------|---------------|-------|
-| Ed25519 | 64 bytes | High | Very Fast |
-| RSA-2048 | 256 bytes | Medium | Slow |
-| ECDSA P-256 | 64 bytes | High | Fast |
-| RSA-4096 | 512 bytes | High | Very Slow |
+| Algorithm | Signature size | Public key size |
+|-----------|---------------|-----------------|
+| Ed25519 | 64 bytes | 32 bytes |
+| ECDSA P-256 | about 64 bytes | 33 to 65 bytes |
+| RSA-2048 | 256 bytes | about 270 bytes |
+| RSA-4096 | 512 bytes | about 550 bytes |
 
-## SHA-256 File Hashing
+## SHA-256 file hashing
 
-### What Is a Hash Function?
+### What is a hash function?
 
-A cryptographic hash function takes any amount of data and produces a fixed-size "fingerprint" (hash). SHA-256 produces a 256-bit (32-byte) hash that:
+A cryptographic hash function takes any amount of data and produces a fixed-size fingerprint. SHA-256 produces a 256-bit (32-byte) hash with these properties:
 
-- **Deterministic**: Same input always produces same hash
-- **Avalanche effect**: Tiny input changes create completely different hashes
-- **One-way**: Computing the original data from the hash is practically impossible
-- **Collision-resistant**: Finding two different inputs with the same hash is extremely difficult
+- **Deterministic**: the same input always produces the same hash
+- **Avalanche effect**: tiny input changes create completely different hashes
+- **One-way**: recovering the data from the hash is practically impossible
+- **Collision-resistant**: finding two inputs with the same hash is extremely difficult
 
-### Hash Properties in Action
+### Hash properties in action
 
 ```
 Original file: "Hello, World!"
@@ -77,288 +84,201 @@ Modified file: "Hello, World?"  (just changed ! to ?)
 SHA-256 hash: f5ca38f748a1d6eaf726b8a42fb575c3c71f1864a8143301782de13da2d9202b
 ```
 
-Notice how a single character change completely changes the hash.
+A single character change completely changes the hash.
 
-### File Fingerprinting Process
+### File fingerprinting process
 
-1. **File Upload**: Your file is read in your browser
-2. **Chunk Processing**: Large files are processed in small chunks to maintain performance
-3. **Hash Calculation**: SHA-256 algorithm processes every byte of your file
-4. **Fingerprint Creation**: Results in a unique 64-character hexadecimal string
+1. **File selection**: your file is read in your browser and never uploaded.
+2. **Chunked processing**: files up to 500 MB are read and hashed in chunks, so large files do not exhaust memory.
+3. **Hash calculation**: SHA-256 processes every byte of the file.
+4. **Fingerprint**: the result is a 32-byte digest, shown as 64 hexadecimal characters.
 
-## The Signing Process
+Any file type is accepted.
 
-### Step-by-Step Breakdown
+## The signing process
 
-1. **File Hashing**
+### Step-by-step
+
+1. **Hash the file in the browser**
    ```
-   File → SHA-256 → Hash (e.g., "abc123...def789")
-   ```
-
-2. **Message Construction**
-   ```
-   Message = FileHash + ":" + GmailAddress + ":" + Timestamp
-   Example: "abc123...def789:user@gmail.com:1640995200000"
+   File -> SHA-256 -> 32-byte digest
    ```
 
-3. **Signature Generation**
+2. **Send the hash to the server.** The user must be signed in with Google. The server takes the email from the verified session and the time from its own clock.
+
+3. **Build the message.** The signed message is this UTF-8 string:
    ```
-   Signature = Ed25519_Sign(PrivateKey, Message)
+   <hash_hex>:<email>:<timestamp>
+   ```
+   `hash_hex` is the digest as 64 lowercase hex characters, `email` is the raw Google account email, and `timestamp` is milliseconds since the Unix epoch in decimal.
+
+4. **Sign with the ContentProof key**
+   ```
+   signature = Ed25519_Sign(ServerPrivateKey, message)
    ```
 
-4. **Package Creation**
+5. **Package the record.** The verification link is:
    ```
-   SignaturePackage = {
-     signature: "base64-encoded-signature",
-     publicKey: "base64-encoded-public-key", 
-     timestamp: 1640995200000
+   https://<host>/verify#P=<payload>
+   ```
+   and the payload is six fields separated by tildes:
+   ```
+   2~<kid>~<hash>~<email>~<timestamp>~<signature>
+   ```
+
+| Field | Meaning |
+|-------|---------|
+| `2` | Format version |
+| `kid` | Key id: first 16 characters of base64url(SHA-256(SPKI DER of the public key)) |
+| `hash` | base64url, no padding, 43 characters, of the 32-byte digest |
+| `email` | `encodeURIComponent(email)`, with any `~` also encoded as `%7E` |
+| `timestamp` | Milliseconds since the Unix epoch, decimal |
+| `signature` | base64url, no padding, 86 characters, of the 64-byte signature |
+
+Note the hash is hex in the signed message but base64url in the payload.
+
+The payload sits in the URL fragment (after `#`). Browsers never send the fragment to the server, so opening a verification link does not disclose the record to ContentProof.
+
+### Why this design?
+
+- **Including the hash** ties the signature to the exact file content.
+- **Including the email** records which Google account the service saw submit the hash.
+- **Including the timestamp** records when the service saw it. The time comes from the ContentProof server, not from the user.
+- **Including a key id** lets verifiers pick the right key after rotation.
+- **Colon separators** give an unambiguous message structure.
+
+## The verification process
+
+### Steps
+
+An independent verifier can follow these steps without ContentProof software:
+
+1. **Fetch the key set** from `https://<host>/.well-known/public-keys.json`:
+   ```json
+   {
+     "current": "<kid>",
+     "keys": {
+       "<kid>": { "keyId": "<kid>", "algorithm": "Ed25519", "publicKey": "<base64 SPKI DER>" }
+     }
    }
    ```
+2. **Look up the key.** Find `keys[kid].publicKey`. It is base64 SPKI DER; the raw 32-byte Ed25519 key is the last 32 bytes. Reject the record if the key id is absent.
+3. **Hash the file** with SHA-256 and compare it with the payload hash.
+4. **Rebuild the message** `<hash_hex>:<email>:<timestamp>` and verify the Ed25519 signature with the public key.
 
-### Why This Design?
+The Content Proof verifier does this in your browser and caches the key set so it works offline once cached. It never trusts a key carried inside the QR code, because anyone could forge a QR code containing their own key.
 
-**Including the hash**: Ensures the signature is tied to the specific file content
-**Including the email**: Cryptographically binds the signature to the signer's identity  
-**Including the timestamp**: Prevents replay attacks and provides chronological proof
-**Using colons**: Creates unambiguous message structure
+### Results
 
-## The Verification Process
+- **Valid**: the signature matches a published ContentProof key and the file's hash matches the record.
+- **Invalid**: the file was modified, the link was damaged, or the key id is not published.
 
-### Cryptographic Verification Steps
-
-1. **Signature Decoding**
-   - Extract signature data from QR code or manual input
-   - Decode base64-encoded components
-
-2. **Message Reconstruction**
-   - Calculate SHA-256 hash of the uploaded file
-   - Reconstruct the original signed message: `hash:email:timestamp`
-
-3. **Mathematical Verification**
-   - Use Ed25519 verification algorithm
-   - Check if signature was created with the private key corresponding to the public key
-   - Verify against the reconstructed message
-
-4. **Result Interpretation**
-   - ✅ Valid: Signature mathematically correct, file unchanged
-   - ❌ Invalid: File modified, signature corrupted, or wrong signer
-
-### The Mathematics Behind Verification
-
-Ed25519 uses elliptic curve mathematics. Without diving into complex math:
-
-1. **Key Pair Generation**: Creates mathematically linked private and public keys
-2. **Signing**: Uses private key to create signature that proves ownership
-3. **Verification**: Uses public key to verify signature without revealing private key
+### The mathematics behind verification
 
 ```
 If Verify(PublicKey, Message, Signature) = True:
-    Then the holder of PrivateKey signed this exact Message
+    Then the holder of the matching private key signed this exact Message
     And the Message has not been modified since signing
 ```
 
-## Security Model
+For Content Proof, the holder of the private key is the ContentProof service.
 
-### What We Protect Against
+### Legacy QR codes
 
-**File Tampering**
-- Any modification to file content invalidates the signature
-- Even changing a single bit is detectable
-- Accidental corruption is caught
+Codes created before this format used `?data=<base64url JSON>`. They are still accepted only when the key they carry matches a published key, and the verifier asks for the signer's email.
 
-**Identity Spoofing**
-- Gmail OAuth prevents unauthorized access to accounts
-- Private keys are never shared or transmitted
-- Signatures are cryptographically bound to Gmail addresses
+## Security model
 
-**Replay Attacks**
-- Timestamps prevent old signatures from being reused
-- Each signature is unique to a specific moment in time
+### What the design protects against
 
-**Man-in-the-Middle Attacks**
-- HTTPS encryption protects data transmission
-- Signature verification happens locally when possible
+**File tampering**
+- Any change to the file changes its hash and fails verification.
+- Accidental corruption is caught.
 
-### Security Assumptions
+**Forged records**
+- Without the ContentProof private key, nobody can produce a record that verifies against the published key set.
+- Embedding an attacker's key in a QR code does not help, because verifiers only use published keys.
 
-Our security model assumes:
-- Google OAuth is secure and Gmail accounts are trusted
-- Ed25519 algorithm remains cryptographically sound
-- Users keep their Google accounts secure (use 2FA)
-- Our private keys remain confidential
+**Altered email or time**
+- The email and timestamp are inside the signed message, so changing either breaks the signature.
 
-### What We Don't Protect Against
+**Eavesdropping on the link**
+- The payload is in the URL fragment and is not sent to the server by the browser. HTTPS protects the key set and sign-in traffic.
 
-**Social Engineering**
-- If someone gains access to your Gmail account, they could sign files as you
-- Solution: Use strong passwords and enable 2-factor authentication
+### Security assumptions
 
-**Quantum Computing (Future)**
-- Advanced quantum computers could eventually break Ed25519
-- Solution: We monitor post-quantum cryptography developments
+- Google sign-in correctly identifies the account holder.
+- Ed25519 and SHA-256 remain secure.
+- The ContentProof private key stays confidential.
+- The ContentProof server clock is accurate.
 
-**Legal Disputes**
-- Cryptographic proof doesn't resolve all ownership disputes
-- Solution: Combine with traditional legal documentation when needed
+### What it does not protect against
 
-## Key Management
+**Compromised Google accounts**
+- Anyone who controls your Google account can obtain attestations as you. Use strong passwords and two-step verification.
 
-### Our Key Infrastructure
+**Compromised service key**
+- If the ContentProof private key leaks, an attacker could forge records. Key rotation limits the damage going forward, but records signed before a compromise cannot be told apart from forged ones by signature alone.
 
-**Server-Side Keys**
-- Ed25519 private key securely stored in environment variables
-- Public key distributed via `/.well-known/public-keys.json`
-- Regular security audits and monitoring
+**Authorship and ownership disputes**
+- A record shows who submitted a hash and when. It does not show who created the file. Combine it with other evidence when needed.
 
-**Key Rotation Strategy**
-- Planned annual key rotation for security
-- Backward compatibility with old signatures
-- Transparent public key distribution
+**Non-repudiation by the user**
+- The user holds no key, so a signature cannot be used to show the user personally signed.
 
-**Emergency Procedures**
-- Key revocation process for security incidents
-- Notification system for key changes
-- Recovery procedures for service continuity
+**Quantum computing**
+- Ed25519 is not quantum-resistant.
 
-### Client-Side Security
+## Key management
 
-**Browser Requirements**
-- Modern Web Crypto API for secure hashing
-- TLS 1.3 for encrypted communications
-- Same-origin policy enforcement
+- The Ed25519 private key is supplied to the server through environment variables. In production the server refuses to sign if it is missing.
+- The public keys are published at `/.well-known/public-keys.json`, with a `current` key id and a map of key ids to keys.
+- When keys are rotated, previous public keys stay in the published set so older records continue to verify.
+- The key id in each record selects the key to use.
 
-**Local Processing**
-- File hashing happens in your browser when possible
-- No file contents transmitted to servers
-- Verification can work offline after initial setup
+### Client side
 
-## Interactive Examples
+- File hashing uses the browser's Web Crypto API and runs locally.
+- File contents are never transmitted to ContentProof.
+- Verification works offline once the key set has been cached.
 
-### Hash Calculator Demo
+## Signature formats at a glance
 
-Try changing the input text and watch how the hash changes:
+**Raw signature**: 64 bytes of binary data.
 
+**In the payload**: base64url without padding, 86 characters.
+
+**QR code content**:
 ```
-Input: [                    ]
-SHA-256: [calculating...]
+https://<host>/verify#P=2~<kid>~<hash>~<email>~<timestamp>~<signature>
 ```
 
-*Note: This would be an interactive component on the actual page*
-
-### Signature Visualization
-
-Here's how a signature looks in different formats:
-
-**Raw Signature (Binary)**
-```
-[64 bytes of binary data - not human readable]
-```
-
-**Base64 Encoded**
-```
-MEUCIQDKyP4VbG8W3X4YZQ7xK5XbVR2pL9mN8zF6wE3QqR7vTgIgH8mPx2nF5C1A6bK9wY2vZ3jE4rS8tU0qW7cX1dN5oGk=
-```
-
-**QR Code Content**
-```
-https://contentproof.app/verify?data=eyJzaWduYXR1cmUiOi...
-```
-
-## Comparison with Other Solutions
+## Comparison with other approaches
 
 ### Content Proof vs C2PA
 
 | Feature | Content Proof | C2PA |
 |---------|--------------|------|
-| Cost | Free with Gmail | $250+ annually |
-| Setup | Instant OAuth | Business verification required |
-| Trust Model | Gmail identity | Certificate authorities |
-| Metadata | Survives stripping | Often lost in processing |
-| Verification | QR code scanning | Specialized tools |
+| Where the proof lives | In a QR code or link, separate from the file | Embedded in file metadata |
+| Who signs | ContentProof service key | Certificates held by the creator or tool |
+| Trust anchor | ContentProof's published key | Certificate authorities |
+| Survives metadata stripping | Yes, because it travels separately | Often lost in processing |
+| Verification | Browser, with a QR code or link | Specialized tools |
 
-### Content Proof vs Blockchain
+### Content Proof vs blockchain timestamping
 
-| Feature | Content Proof | Blockchain Solutions |
+| Feature | Content Proof | Blockchain solutions |
 |---------|--------------|---------------------|
-| Speed | Instant | Minutes to hours |
-| Cost | Free | Gas fees required |
-| Environmental Impact | Minimal | High energy usage |
-| Scalability | High | Limited throughput |
-| User Experience | Simple | Complex wallet management |
+| Speed | Immediate | Minutes to hours |
+| Cost | Free | Fees required |
+| Trust anchor | A single service key | Distributed ledger |
+| Timestamp | Server clock, attested by ContentProof | Block time, independent of any one party |
+| User experience | Sign in with Google | Wallet management |
 
-## Performance Characteristics
-
-### Signing Performance
-
-- **File Hashing**: ~1-2 seconds for 10MB files
-- **Signature Generation**: ~100ms on server
-- **QR Code Creation**: ~200ms in browser
-- **Total Time**: Usually under 5 seconds
-
-### Verification Performance
-
-- **Hash Calculation**: ~1-2 seconds for 10MB files  
-- **Signature Verification**: ~50ms in browser
-- **QR Code Scanning**: ~1 second with phone camera
-- **Total Time**: Usually under 10 seconds
-
-### Scalability
-
-Current system can handle:
-- **Concurrent users**: 1000+ simultaneous
-- **Signatures per second**: 100+
-- **Verifications per second**: 1000+ (mostly offline)
-- **File size limit**: 10MB (technical, not security limitation)
-
-## Future Cryptographic Enhancements
-
-### Post-Quantum Cryptography
-
-We're monitoring developments in quantum-resistant algorithms:
-- **CRYSTALS-Dilithium**: Leading post-quantum signature scheme
-- **Falcon**: Compact post-quantum signatures
-- **SPHINCS+**: Hash-based signatures (quantum-proof)
-
-### Advanced Features in Development
-
-**Multi-Signature Support**
-- Multiple parties signing the same document
-- Threshold signatures (N of M signers required)
-- Sequential signature workflows
-
-**Zero-Knowledge Proofs**
-- Prove file properties without revealing content
-- Private verification with public auditability
-- Enhanced privacy features
-
-**Blockchain Integration**
-- Optional immutable timestamping
-- Decentralized verification networks
-- Smart contract integration
-
-## Technical Resources
-
-### Standards and Specifications
+## Technical resources
 
 - **RFC 8032**: Edwards-Curve Digital Signature Algorithm (EdDSA)
 - **FIPS 180-4**: Secure Hash Standard (SHA-256)
-- **RFC 6234**: US Secure Hash Algorithms
-- **RFC 7517**: JSON Web Key (JWK) format
-
-### Open Source Libraries
-
-Our implementation uses well-audited libraries:
-- **Node.js Crypto**: Server-side Ed25519 implementation
-- **TweetNaCl**: Client-side verification library
-- **Web Crypto API**: Browser-native hashing
-
-### Security Audits
-
-- Regular security reviews by independent experts
-- Open source components with public security track records
-- Automated vulnerability scanning
-- Bug bounty program for responsible disclosure
-
----
-
-*For technical questions about our cryptographic implementation, contact: crypto@contentproof.app*
+- **RFC 4648**: Base64url encoding
+- **Web Crypto API**: browser-native hashing
+- **Node.js crypto**: server-side Ed25519

@@ -1,27 +1,48 @@
-export function fromBase64Url(base64url: string): Uint8Array {
-  // Pad string to length divisible by 4
-  const padding = 4 - (base64url.length % 4 || 4);
-  const base64 = (base64url + "=".repeat(padding))
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-  if (typeof window === "undefined") {
-    return Uint8Array.from(Buffer.from(base64, "base64"));
-  }
-  const binary = window.atob(base64);
-  const len = binary.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+/**
+ * Environment-agnostic byte/string encoding helpers. `atob`/`btoa` and
+ * `TextEncoder`/`TextDecoder` exist in every supported browser and in Node 18+,
+ * so the same code path runs on the server and in the verify page.
+ */
+export { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
+
+export function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+/** Decode standard Base64. Throws on invalid input. */
+export function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
 }
 
-/**
- * Convenience helper that decodes a Base64URL string directly to UTF-8.
- * Uses {@link fromBase64Url} internally and handles both Node and browser
- * environments.
- */
+/** Encode bytes as Base64URL without padding (RFC 4648 §5). */
+export function toBase64Url(bytes: Uint8Array): string {
+  return bytesToBase64(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** Decode Base64URL (padding optional). Throws on invalid input. */
+export function fromBase64Url(base64url: string): Uint8Array {
+  const padding = (4 - (base64url.length % 4)) % 4;
+  const base64 = (base64url + "=".repeat(padding)).replace(/-/g, "+").replace(/_/g, "/");
+  return base64ToBytes(base64);
+}
+
+export function utf8ToBytes(text: string): Uint8Array {
+  return new TextEncoder().encode(text);
+}
+
+export function bytesToUtf8(bytes: Uint8Array): string {
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+export function stringToBase64Url(text: string): string {
+  return toBase64Url(utf8ToBytes(text));
+}
+
 export function base64UrlToString(base64url: string): string {
-  const bytes = fromBase64Url(base64url);
-  return typeof window === "undefined"
-    ? Buffer.from(bytes).toString("utf8")
-    : new TextDecoder("utf-8").decode(bytes);
+  return bytesToUtf8(fromBase64Url(base64url));
 }

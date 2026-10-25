@@ -1,102 +1,80 @@
+import { sign } from "node:crypto";
+import { getSigningKeyPair } from "@/lib/keys";
+import { verifyEd25519Raw } from "@/lib/crypto/verify";
 import {
-  createPrivateKey,
-  createPublicKey,
-  generateKeyPairSync,
-  sign,
-  KeyObject,
-} from "crypto";
+  RECORD_VERSION,
+  RECORD_VERSION_USER_SIGNED,
+  buildServiceMessageV3,
+  buildSignedMessage,
+  hashHexToB64url,
+  isRawPublicKey,
+  isSignatureString,
+  type SignatureRecord,
+} from "@/lib/record";
 
-/**
- * Payload fields that are included in the signature. The concatenation order must be stable
- * so that signatures can be deterministically reproduced and verified.
- */
-export interface SignaturePayload {
-  /**
-   * Hex‐encoded SHA-256 hash of the file being signed.
-   */
-  fileHash: string;
-  /**
-   * Gmail address of the user performing the signing operation.
-   */
-  gmail: string;
-  /**
-   * UNIX epoch timestamp (milliseconds) representing the time of signing.
-   */
-  timestamp: number;
-}
-
-/**
- * Result returned by {@link generateSignature}. Includes the public key so that
- * the consumer does not need access to server-side configuration to verify the
- * signature.
- */
-export interface SignatureData {
-  /** Base64URL-encoded detached Ed25519 signature */
-  signature: string;
-  /** Base64-encoded public key in SPKI DER format */
+/** Signature the account holder made in their browser with their own key. */
+export interface UserSignature {
+  /** base64url raw 32-byte Ed25519 public key. */
   publicKey: string;
-  /** Millisecond timestamp copied from the payload */
-  timestamp: number;
+  /** base64url 64-byte signature over `<hash hex>:<email>:<timestamp>`. */
+  signature: string;
+}
+
+export class InvalidUserSignatureError extends Error {
+  constructor(message = "User signature does not verify") {
+    super(message);
+    this.name = "InvalidUserSignatureError";
+  }
 }
 
 /**
- * Load the server's Ed25519 key pair from environment variables. The keys must
- * be provided as Base64-encoded DER buffers (PKCS#8 for the private key and
- * SPKI for the public key). When running locally without keys configured, a
- * new key pair will be generated on the fly so that development is not
- * blocked.
+ * Produce the service's attestation for a file hash submitted by `email`.
+ *
+ * Without `user`: a version 2 record, meaning "ContentProof attests that
+ * account <email> submitted SHA-256 <hash> at <timestamp>".
+ *
+ * With `user`: the account holder's own key has already signed the same
+ * statement in their browser; the service checks that signature and then
+ * countersigns a statement that includes the user's key and signature,
+ * producing a version 3 record. The service never sees the private key.
  */
-function loadKeyPair(): { privateKey: KeyObject; publicKey: KeyObject } {
-  const priv = process.env.ED25519_PRIVATE_KEY;
-  const pub = process.env.ED25519_PUBLIC_KEY;
+export function signFileHash(
+  hashHex: string,
+  email: string,
+  timestamp: number = Date.now(),
+  user?: UserSignature
+): SignatureRecord {
+  const normalisedHash = hashHex.toLowerCase();
+  const h = hashHexToB64url(normalisedHash); // validates the digest
+  const { privateKey, keyId } = getSigningKeyPair();
 
-  if (priv && pub) {
-    const privateKey = createPrivateKey({
-      key: Buffer.from(priv, "base64"),
-      format: "der",
-      type: "pkcs8",
-    });
-    const publicKey = createPublicKey({
-      key: Buffer.from(pub, "base64"),
-      format: "der",
-      type: "spki",
-    });
-    return { privateKey, publicKey };
+  if (!user) {
+    const message = Buffer.from(buildSignedMessage(normalisedHash, email, timestamp), "utf8");
+    // For Ed25519 the digest algorithm must be null.
+    const signature = sign(null, message, privateKey);
+    return { v: RECORD_VERSION, k: keyId, h, e: email, t: timestamp, s: signature.toString("base64url") };
   }
 
-  // Development fallback – generate an ephemeral key pair. DO **NOT** rely on
-  // this in production; configure the environment variables instead.
-  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
-  return { privateKey, publicKey };
-}
-
-/**
- * Generate a deterministic Ed25519 signature for the given payload. The payload
- * values are concatenated with a colon separator and encoded as UTF-8 prior to
- * signing (e.g. `"<hash>:<gmail>:<timestamp>"`).
- */
-export function generateSignature(payload: SignaturePayload): SignatureData {
-  const { privateKey, publicKey } = loadKeyPair();
-  const message = Buffer.from(
-    `${payload.fileHash}:${payload.gmail}:${payload.timestamp}`,
+  if (!isRawPublicKey(user.publicKey) || !isSignatureString(user.signature)) {
+    throw new InvalidUserSignatureError("Malformed user key or signature");
+  }
+  const userMessage = buildSignedMessage(normalisedHash, email, timestamp);
+  if (!verifyEd25519Raw(userMessage, user.signature, user.publicKey)) {
+    throw new InvalidUserSignatureError();
+  }
+  const serviceMessage = Buffer.from(
+    buildServiceMessageV3(normalisedHash, email, timestamp, user.publicKey, user.signature),
     "utf8"
   );
-
-  // For Ed25519 the algorithm parameter is ignored and should be `null`.
-  const signature = sign(null, message, privateKey);
-
+  const signature = sign(null, serviceMessage, privateKey);
   return {
-    signature: signature.toString("base64url"),
-    publicKey: publicKey.export({ type: "spki", format: "der" }).toString("base64"),
-    timestamp: payload.timestamp,
+    v: RECORD_VERSION_USER_SIGNED,
+    k: keyId,
+    h,
+    e: email,
+    t: timestamp,
+    s: signature.toString("base64url"),
+    u: user.publicKey,
+    us: user.signature,
   };
 }
-
-/**
- * Simple helper to expose the public key in Base64 so that it can be embedded
- * in client-side bundles without Node.js `crypto` imports.
- */
-export function getPublicKeyBase64(): string {
-  const { publicKey } = loadKeyPair();
-  return publicKey.export({ type: "spki", format: "der" }).toString("base64");
-} 

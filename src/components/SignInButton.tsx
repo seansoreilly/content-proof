@@ -6,11 +6,10 @@ export function SignInButton() {
   return (
     <button
       onClick={() => {
-        // If debug auth is enabled, call the artificial debug provider we register on the server.
-        const isDebugAuth =
-          process.env.NEXT_PUBLIC_DEBUG_AUTH === "true" ||
-          process.env.DEBUG_AUTH === "true";
-        if (isDebugAuth) {
+        // UI hint only. The server registers the debug provider solely when
+        // DEBUG_AUTH=true outside production; this flag just picks which
+        // provider the button calls.
+        if (process.env.NEXT_PUBLIC_DEBUG_AUTH === "true") {
           void signIn("debug", { redirect: false }).then(() => {
             window.location.reload();
           });

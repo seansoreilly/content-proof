@@ -625,3 +625,19 @@ test("complete signing flow", async ({ page }) => {
 - Blockchain integration for immutable records
 - AI content detection integration
 - Enterprise PKI bridge solutions
+
+## Implementation notes (2026-10-24)
+
+Deltas between this PRD and the implementation.
+
+- **Attestation model adopted.** A signature means: the ContentProof service attests that a given Google account submitted a given SHA-256 hash at a given time. The user holds no key, so there is no non-repudiation by the user, and a verifier trusts ContentProof's published key. Earlier non-repudiation and "tamper-proof" claims were removed.
+- **Trust scoring dropped.** Trust levels, the `/api/trust` endpoint and the `/api/qr` endpoint were removed.
+- **Any file type, up to 500 MB.** Files are hashed in the browser in chunks; only the hash is sent.
+- **Record format.** Version 2 payload: `2~<kid>~<hash>~<email>~<timestamp>~<signature>` (base64url hash and signature, percent-encoded email, decimal millisecond timestamp). Signed message is `<hash_hex>:<email>:<timestamp>`. See the README for the full specification.
+- **Fragment, not query string.** The QR link is `https://<host>/verify#P=<payload>`, so the payload is never sent to the server. Legacy `?data=` links are still accepted only when the key they carry matches a published key.
+- **Well-known keys.** Verification fetches `/.well-known/public-keys.json` (`current` plus `keys[kid]` with SPKI DER public keys), cached in the browser for offline use. Keys carried in QR codes are never trusted.
+- **Optional services.** `GET /api/sig/<signature>` returns a stored record and `POST /api/verify` verifies server-side. Both are rate limited. Storage and shared rate limiting use Upstash/KV when configured, otherwise in-memory.
+- **Tests and CI added.** Unit tests plus a GitHub Actions workflow running typecheck, lint, test and build.
+- **Transparency log.** Every issued record is appended to an append-only log with an RFC 6962 Merkle tree. `GET /api/log/head` returns a tree head signed by the service key, `GET /api/log/proof` returns inclusion proofs, `GET /api/log/entries` pages the log for mirroring. The verify page checks inclusion after a successful verification, and a scheduled workflow archives tree heads to the repository. `/sig/<signature>` is a public page for one record.
+- **QR image decoding.** The verify page accepts a picture of a QR code and decodes it in the browser.
+- **Account holder keys (record version 3).** The browser generates a non-extractable Ed25519 key (WebCrypto, IndexedDB) and signs `<hash>:<email>:<timestamp>`; the service verifies that signature and countersigns a statement including the key and signature. The verifier checks both and reports whether the account holder's key signed. Browsers without WebCrypto Ed25519 fall back to version 2. Sigstore and passkeys remain future options; see `documentation/adr/0001-per-user-keys-and-sigstore.md`.

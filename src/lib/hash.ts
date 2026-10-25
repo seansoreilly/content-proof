@@ -1,15 +1,29 @@
-export function arrayBufferToHex(buffer: ArrayBuffer): string {
-  return Array.prototype.map
-    .call(new Uint8Array(buffer), (x: number) => x.toString(16).padStart(2, "0"))
-    .join("");
-}
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 
 /**
- * Calculate the SHA-256 hash of a {@link File} and return it as a hex string.
- * Uses the Web Crypto API which is available in all modern browsers.
+ * Upper bound enforced by the upload UI. Hashing is streamed, so this is a
+ * guard against pathological inputs rather than a memory limit.
  */
-export async function sha256Hash(file: File): Promise<string> {
-  const fileBuffer = await file.arrayBuffer();
-  const hashBuffer = await crypto.subtle.digest("SHA-256", fileBuffer);
-  return arrayBufferToHex(hashBuffer);
-} 
+export const MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024;
+
+/**
+ * SHA-256 of a Blob/File as lowercase hex, computed incrementally from the
+ * blob's stream so large files never have to be fully buffered in memory.
+ */
+export async function sha256Hash(file: Blob): Promise<string> {
+  const hasher = sha256.create();
+
+  if (typeof file.stream === "function") {
+    const reader = file.stream().getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      hasher.update(value);
+    }
+  } else {
+    hasher.update(new Uint8Array(await file.arrayBuffer()));
+  }
+
+  return bytesToHex(hasher.digest());
+}
