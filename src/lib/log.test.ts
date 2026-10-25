@@ -4,8 +4,8 @@ import { createMemoryLogStore } from "@/lib/log-store";
 import { leafHash, verifyInclusion } from "@/lib/merkle";
 import { encodeRecord, type SignatureRecord } from "@/lib/record";
 import { keyIdFromSpkiBase64, type PublicKeysJson } from "@/lib/keyset";
-import { verifyLogHead } from "@/lib/log-verify";
-import { hexToBytes } from "@/lib/base64";
+import { verifyInclusionProof, verifyLogHead } from "@/lib/log-verify";
+import { bytesToHex, hexToBytes } from "@/lib/base64";
 
 function rec(i: number): SignatureRecord {
   return {
@@ -68,10 +68,24 @@ describe("signed tree head", () => {
     const proof = await buildInclusionProof(log, 3);
     expect(proof).not.toBeNull();
     const leaf = leafHash(new TextEncoder().encode(encodeRecord(rec(3))));
+    expect(proof!.leafHash).toBe(bytesToHex(leaf));
     expect(
       verifyInclusion(leaf, 3, proof!.size, proof!.proof.map(hexToBytes), hexToBytes(proof!.root))
     ).toBe(true);
     expect(proof!.root).toBe(head.root);
     expect(await buildInclusionProof(log, 99)).toBeNull();
+
+    // The proof carries a signed head over the same tree
+    expect(proof!.head.root).toBe(proof!.root);
+    expect(proof!.head.size).toBe(proof!.size);
+    expect(verifyLogHead(proof!.head, keys)).toBe(true);
+    expect(verifyInclusionProof(rec(3), proof!, keys)).toBe(true);
+    expect(verifyInclusionProof(rec(2), proof!, keys)).toBe(false);
+    expect(verifyInclusionProof(rec(3), proof!, otherKeys)).toBe(false);
+    // A head that does not match the proof's tree is refused
+    expect(verifyInclusionProof(rec(3), { ...proof!, size: 6 }, keys)).toBe(false);
+    expect(verifyInclusionProof(rec(3), { ...proof!, root: "0".repeat(64) }, keys)).toBe(false);
+    expect(verifyInclusionProof(rec(3), { ...proof!, head: { ...proof!.head, size: 4 } }, keys)).toBe(false);
+    expect(verifyInclusionProof(rec(3), { ...proof!, leafHash: "0".repeat(64) }, keys)).toBe(false);
   });
 });

@@ -8,6 +8,7 @@ import {
   extractPayloadFromUrl,
   hashB64urlToHex,
   hashHexToB64url,
+  parseRecordObject,
   type SignatureRecord,
 } from "@/lib/record";
 import { sha256Hex } from "@/test/fixtures";
@@ -70,5 +71,41 @@ describe("record codec", () => {
     const encoded = encodeRecord({ ...sample, e: "thirty.character.email@gmail.com" });
     const url = createVerificationUrl(encoded, "https://contentproof.app");
     expect(url.length).toBeLessThan(260);
+  });
+});
+
+describe("strict record object parsing", () => {
+  const base = {
+    v: 2,
+    k: "AbCdEfGhIjKlMnOp",
+    h: hashHexToB64url(sha256Hex("x")),
+    e: "a@b.co",
+    t: 1_760_000_000_000,
+    s: "A".repeat(86),
+  };
+
+  it("accepts a well-typed object", () => {
+    expect(parseRecordObject(base)).toEqual(base);
+  });
+
+  it("does not coerce strings for v or t", () => {
+    expect(parseRecordObject({ ...base, t: "1760000000000" })).toBeNull();
+    expect(parseRecordObject({ ...base, v: "2" })).toBeNull();
+  });
+
+  it("requires t to be a positive safe integer", () => {
+    expect(parseRecordObject({ ...base, t: 0 })).toBeNull();
+    expect(parseRecordObject({ ...base, t: -5 })).toBeNull();
+    expect(parseRecordObject({ ...base, t: 1.5 })).toBeNull();
+    expect(parseRecordObject({ ...base, t: 2 ** 53 })).toBeNull();
+    expect(parseRecordObject({ ...base, t: Number.NaN })).toBeNull();
+  });
+
+  it("still decodes the string-typed wire format", () => {
+    const wire = encodeRecord(base as SignatureRecord);
+    expect(decodeRecord(wire)).toEqual(base);
+    expect(decodeRecord(wire.replace(`~${base.t}~`, "~1e12~"))).toBeNull();
+    expect(decodeRecord(wire.replace(`~${base.t}~`, "~-1~"))).toBeNull();
+    expect(decodeRecord(wire.replace(`~${base.t}~`, "~99999999999999999999~"))).toBeNull();
   });
 });

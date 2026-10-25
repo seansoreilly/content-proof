@@ -41,6 +41,10 @@ export async function decodeQrFile(file: Blob, maxSide = 1600): Promise<string |
     canvas.height = height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
+    // Transparent pixels read as black in the canvas, which hides a QR code
+    // that has a transparent background. Paint white underneath first.
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, width, height);
     ctx.drawImage(bitmap, 0, 0, width, height);
     return decodeQrImageData(ctx.getImageData(0, 0, width, height));
   } finally {

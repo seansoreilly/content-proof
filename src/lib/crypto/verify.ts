@@ -83,9 +83,16 @@ export function verifyEd25519Raw(
 
 /**
  * Verify a record against the file's SHA-256 (hex) and the published key set.
- * Order matters for the error reported: an unpublished key is the most
- * important thing to tell the user, then a changed file, then a bad service
- * signature, then a bad account-holder signature.
+ *
+ * The order decides which failure is reported, and it is deliberate: every
+ * check that needs only the record runs before the check that needs the file.
+ * The service signature covers the record's own hash, so it can be checked
+ * without the file. A forged or edited record is therefore reported as such
+ * and never as "your file changed", which would send the user chasing the
+ * wrong problem. Only a genuine record can reach the file comparison, so
+ * hash-mismatch reliably means "right record, wrong file".
+ *
+ * Order: unknown-key, bad-signature, bad-user-signature, hash-mismatch, ok.
  */
 export function verifyRecord(
   record: SignatureRecord,
@@ -103,24 +110,27 @@ export function verifyRecord(
   } catch {
     return { ok: false, reason: "malformed" };
   }
-  if (recordHashHex !== fileHashHex.toLowerCase()) {
-    return { ok: false, reason: "hash-mismatch" };
-  }
 
   if (!verifyEd25519(serviceMessageFor(record, recordHashHex), record.s, entry.publicKey)) {
     return { ok: false, reason: "bad-signature" };
   }
 
-  if (record.v === RECORD_VERSION_USER_SIGNED) {
+  const userSigned = record.v === RECORD_VERSION_USER_SIGNED;
+  if (userSigned) {
     if (!record.u || !record.us) return { ok: false, reason: "malformed" };
     const userMessage = buildSignedMessage(recordHashHex, record.e, record.t);
     if (!verifyEd25519Raw(userMessage, record.us, record.u)) {
       return { ok: false, reason: "bad-user-signature" };
     }
-    return { ok: true, keyId: record.k, userSigned: true, userKey: record.u };
   }
 
-  return { ok: true, keyId: record.k, userSigned: false };
+  if (recordHashHex !== fileHashHex.toLowerCase()) {
+    return { ok: false, reason: "hash-mismatch" };
+  }
+
+  return userSigned && record.u
+    ? { ok: true, keyId: record.k, userSigned: true, userKey: record.u }
+    : { ok: true, keyId: record.k, userSigned: false };
 }
 
 /** Shape of the pre-version-2 payload that older QR codes still carry. */

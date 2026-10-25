@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMemoryStore, createRateLimiter, getClientIp } from "@/lib/rate-limit";
+import { createMemoryStore, createRateLimiter, getClientIp, rateLimitedResponse } from "@/lib/rate-limit";
 
 describe("rate limiter", () => {
   it("allows up to the limit in a window and blocks the next request", async () => {
@@ -27,6 +27,16 @@ describe("rate limiter", () => {
     };
     const limit = createRateLimiter(broken, { limit: 1, windowSeconds: 1, prefix: "t" });
     expect((await limit("x")).allowed).toBe(true);
+  });
+
+  it("builds a 429 with retry and rate-limit headers and a generic body", async () => {
+    const res = rateLimitedResponse({ allowed: false, remaining: 0 }, 30, { "Access-Control-Allow-Origin": "*" });
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("60");
+    expect(res.headers.get("x-ratelimit-limit")).toBe("30");
+    expect(res.headers.get("x-ratelimit-remaining")).toBe("0");
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    expect(await res.json()).toEqual({ error: "Too many requests" });
   });
 
   it("extracts the first forwarded IP", () => {

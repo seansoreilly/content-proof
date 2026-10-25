@@ -9,6 +9,7 @@ export {
   type TextAreaProps,
   type FileFieldProps,
 } from "./Field";
+export { LocalTime, type LocalTimeProps } from "./LocalTime";
 export { RecordSummary, type RecordSummaryProps } from "./RecordSummary";
 export { buildSummaryRows, type SummaryRow } from "./summary-rows";
 export { VerifyResult, type VerifyResultProps } from "./VerifyResult";

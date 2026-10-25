@@ -3,7 +3,6 @@ import { bytesToHex } from "@/lib/base64";
 import { getSigningKeyPair } from "@/lib/keys";
 import type { LogStore } from "@/lib/log-store";
 import { computeRoot, inclusionProof } from "@/lib/merkle";
-import { encodeRecord } from "@/lib/record";
 import { logHeadMessage, recordLeafHash, type InclusionProofResponse, type SignedLogHead } from "@/lib/log-verify";
 
 /**
@@ -25,24 +24,31 @@ async function allLeaves(log: LogStore): Promise<Uint8Array[]> {
   return leaves;
 }
 
-export async function buildSignedLogHead(log: LogStore, timestamp: number = Date.now()): Promise<SignedLogHead> {
-  const leaves = await allLeaves(log);
+function signLogHead(leaves: Uint8Array[], timestamp: number): SignedLogHead {
   const root = bytesToHex(computeRoot(leaves));
   const { privateKey, keyId } = getSigningKeyPair();
   const signature = sign(null, Buffer.from(logHeadMessage(leaves.length, root, timestamp), "utf8"), privateKey);
   return { size: leaves.length, root, timestamp, keyId, signature: signature.toString("base64url") };
 }
 
+export async function buildSignedLogHead(log: LogStore, timestamp: number = Date.now()): Promise<SignedLogHead> {
+  return signLogHead(await allLeaves(log), timestamp);
+}
+
+/**
+ * Inclusion proof plus a signed head computed from the same leaves, so the
+ * proof's root always matches a head the service has signed.
+ */
 export async function buildInclusionProof(log: LogStore, index: number): Promise<InclusionProofResponse | null> {
-  const record = await log.get(index);
-  if (!record) return null;
   const leaves = await allLeaves(log);
   if (index >= leaves.length) return null;
+  const head = signLogHead(leaves, Date.now());
   return {
     index,
-    size: leaves.length,
-    root: bytesToHex(computeRoot(leaves)),
-    leaf: encodeRecord(record),
+    size: head.size,
+    root: head.root,
+    leafHash: bytesToHex(leaves[index]),
     proof: inclusionProof(leaves, index).map(bytesToHex),
+    head,
   };
 }

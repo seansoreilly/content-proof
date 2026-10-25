@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { NextAuthOptions } from "next-auth";
 import { isAllowedEmail } from "@/lib/auth/validation";
 
 async function loadAuthOptions() {
@@ -18,6 +19,36 @@ describe("email allow-list", () => {
     expect(isAllowedEmail("a@Example.ORG")).toBe(true);
     expect(isAllowedEmail("a@anywhere.io")).toBe(false);
     expect(isAllowedEmail(null)).toBe(false);
+  });
+});
+
+describe("sign-in callback and pages", () => {
+  type SignInArgs = Parameters<NonNullable<NonNullable<NextAuthOptions["callbacks"]>["signIn"]>>[0];
+  const asProfile = (value: unknown): SignInArgs["profile"] => value as SignInArgs["profile"];
+  const user = { id: "u", email: "a@gmail.com" };
+  const call = async (args: Partial<SignInArgs>): Promise<boolean | string> => {
+    vi.stubEnv("ALLOWED_EMAIL_DOMAINS", "");
+    const options = await loadAuthOptions();
+    return options.callbacks!.signIn!({ user, account: null, ...args } as SignInArgs);
+  };
+
+  it("routes sign-in and errors to the app's own pages", async () => {
+    const options = await loadAuthOptions();
+    expect(options.pages).toEqual({ signIn: "/auth/signin", error: "/auth/error" });
+  });
+
+  it("requires a verified Google email", async () => {
+    const google = { provider: "google", type: "oauth", providerAccountId: "1" } as const;
+    expect(await call({ account: google, profile: asProfile({ email_verified: true }) })).toBe(true);
+    expect(await call({ account: google, profile: asProfile({ email_verified: false }) })).toBe(false);
+    expect(await call({ account: google, profile: asProfile({ email_verified: "true" }) })).toBe(false);
+    expect(await call({ account: google, profile: asProfile({}) })).toBe(false);
+    expect(await call({ account: google })).toBe(false);
+  });
+
+  it("leaves other providers (debug) unaffected", async () => {
+    const debug = { provider: "debug", type: "credentials", providerAccountId: "1" } as const;
+    expect(await call({ account: debug })).toBe(true);
   });
 });
 

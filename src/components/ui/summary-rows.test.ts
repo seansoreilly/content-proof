@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildSummaryRows } from "./summary-rows";
+import { formatLocalTime } from "@/lib/format-time";
 import type { SignatureRecord } from "@/lib/record";
 
 const base: SignatureRecord = {
@@ -17,7 +18,7 @@ describe("buildSummaryRows", () => {
     expect(labels).toEqual([
       "Attested for",
       "At",
-      "Service key",
+      "Service key id",
       "Account holder's key",
     ]);
   });
@@ -31,6 +32,17 @@ describe("buildSummaryRows", () => {
     const rows = buildSummaryRows(base, { showHash: true, timeFormat: "iso" });
     expect(rows.find((r) => r.label === "At")?.value).toBe("2026-01-02T03:04:05.000Z");
     expect(rows.find((r) => r.label === "File SHA-256")?.value).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("shows the local time with a zone and carries the ISO value", () => {
+    const row = buildSummaryRows(base).find((r) => r.label === "At");
+    expect(row?.value).toBe(formatLocalTime(base.t));
+    expect(row?.iso).toBe("2026-01-02T03:04:05.000Z");
+  });
+
+  it("formats local time with an explicit zone name", () => {
+    expect(formatLocalTime(base.t, "UTC")).toMatch(/UTC/);
+    expect(formatLocalTime(base.t, "Australia/Melbourne")).toMatch(/GMT\+11|AEDT/);
   });
 
   it("renders log entry states", () => {
