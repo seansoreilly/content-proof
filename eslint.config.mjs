@@ -11,7 +11,16 @@ const compat = new FlatCompat({
 
 const eslintConfig = [
   {
-    ignores: [".next/**", "out/**", "node_modules/**", "next-env.d.ts", "*.config.js"],
+    // `eslint .` walks the whole checkout, unlike the old `next lint`, so skip
+    // build output, dependencies, and sibling git worktrees under .claude/.
+    ignores: [
+      "**/.next/**",
+      "**/out/**",
+      "**/node_modules/**",
+      "**/next-env.d.ts",
+      ".claude/**",
+      "*.config.js",
+    ],
   },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];
