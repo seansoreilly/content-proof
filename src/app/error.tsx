@@ -1,22 +1,23 @@
 "use client";
 
+import { Button, Eyebrow, Panel } from "@/components/ui";
+
 export default function Error({
   reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
-}) {
+}): React.JSX.Element {
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="text-center">
-        <h2 className="text-2xl font-bold mb-4">Something went wrong!</h2>
-        <button
-          onClick={() => reset()}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
-          Try again
-        </button>
-      </div>
+    <div className="px-4 py-10 sm:py-16">
+      <Panel className="mx-auto max-w-2xl">
+        <Eyebrow>Something went wrong</Eyebrow>
+        <p className="my-4">
+          The page failed to load. Try again, and if it keeps happening come
+          back in a few minutes.
+        </p>
+        <Button onClick={() => reset()}>Try again</Button>
+      </Panel>
     </div>
   );
 }

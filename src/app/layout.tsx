@@ -5,6 +5,7 @@ import { AuthProvider } from "@/components/SessionProvider";
 import Script from "next/script";
 import { GA_TRACKING_ID } from "@/lib/analytics";
 import Link from "next/link";
+import { DevelopmentBuildInfo, SealMark } from "@/components/ui";
 
 const display = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -43,15 +44,21 @@ export default function RootLayout({
       className={`${display.variable} ${body.variable} ${mono.variable}`}
     >
       <body className="font-body bg-paper text-ink">
-        {/* Top Right Navigation */}
-        <header className="absolute top-6 right-6 z-50 flex items-center gap-4 text-sm text-mute">
-          <Link href="/privacy" className="hover:underline">
-            Privacy Policy
+        <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-4">
+          <Link href="/" className="flex items-center gap-3 text-ink">
+            <SealMark tone="sealed" size={28} label="CP" />
+            <span className="font-display font-semibold uppercase tracking-[0.12em]">
+              ContentProof
+            </span>
           </Link>
-          <span className="text-relief">|</span>
-          <Link href="/how-it-works" className="hover:underline">
-            How it works
-          </Link>
+          <nav className="flex items-center gap-6 text-sm text-mute">
+            <Link href="/how-it-works" className="hover:text-ink">
+              How it works
+            </Link>
+            <Link href="/privacy" className="hover:text-ink">
+              Privacy
+            </Link>
+          </nav>
         </header>
         {/* Google Analytics */}
         <Script
@@ -66,7 +73,15 @@ export default function RootLayout({
             gtag('config', '${GA_TRACKING_ID}');
           `}
         </Script>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <main className="min-h-screen">{children}</main>
+        </AuthProvider>
+        <footer className="px-4 py-8 text-center text-xs text-mute">
+          <DevelopmentBuildInfo />
+          <p className="font-mono text-mute">
+            Keys at /.well-known/public-keys.json
+          </p>
+        </footer>
       </body>
     </html>
   );
