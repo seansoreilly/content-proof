@@ -13,27 +13,27 @@ export function BuildInfo({
 
   if (variant === "minimal") {
     return (
-      <div className={`text-xs text-gray-500 ${className}`}>
+      <div className={`text-xs text-mute ${className}`}>
         <span className="font-mono">v{buildInfo.commitHash}</span>
       </div>
     );
   }
 
   return (
-    <div className={`text-xs text-gray-500 space-y-1 ${className}`}>
+    <div className={`text-xs text-mute space-y-1 ${className}`}>
       <div className="font-mono">
         <span className="font-semibold">Build:</span>{" "}
-        <span className="text-gray-600">{buildInfo.commitHash}</span>
+        <span className="text-ink">{buildInfo.commitHash}</span>
       </div>
       <div>
         <span className="font-semibold">Built:</span>{" "}
-        <span className="text-gray-600">
+        <span className="text-ink">
           {formatBuildTime(buildInfo.buildTime)}
         </span>
       </div>
       <div>
         <span className="font-semibold">Env:</span>{" "}
-        <span className="text-gray-600">{buildInfo.environment}</span>
+        <span className="text-ink">{buildInfo.environment}</span>
       </div>
     </div>
   );
@@ -50,18 +50,18 @@ export function DevelopmentBuildInfo() {
   return (
     <div className="text-center space-y-2">
       <div className="text-center">
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-mute">
           Created by{" "}
           <a
             href="https://balddata.xyz/"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-gray-700 underline"
+            className="hover:text-ink underline"
           >
             Bald Data
           </a>{" "}
           • Build:{" "}
-          <span className="font-mono text-gray-600">
+          <span className="font-mono text-ink">
             {buildInfo.commitHash || "unknown"}
           </span>
         </p>
