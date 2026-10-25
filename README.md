@@ -1,14 +1,20 @@
 # ContentProof
 
 ContentProof is an attestation (notary) service. You sign in with Google, your
-browser hashes a file with SHA-256, and the server returns a signature over that
-hash made with the ContentProof Ed25519 key. The file never leaves your browser;
-only its hash is sent.
+browser hashes a file with SHA-256 and signs the hash with a key held in that
+browser, and the server countersigns who, what and when with the ContentProof
+Ed25519 key. The service never holds your key. The file never leaves your
+browser; only its hash is sent. Anyone can verify the result against the
+published keys.
 
-A valid signature proves one thing: **the ContentProof service attests that the
-Google account `<email>` submitted the SHA-256 hash `<hash>` at time
-`<timestamp>`.** You hold no key, so this is not a signature by you and gives no
-non-repudiation by the user. Anyone verifying is trusting ContentProof's
+A valid signature proves one thing. For a version 3 record: **the holder of the
+browser key `<ukey>` approved the statement that the Google account `<email>`
+submitted the SHA-256 hash `<hash>` at time `<timestamp>`, and ContentProof
+countersigned it.** The binding of `<ukey>` to the account is asserted by the
+service at signing time. For a version 2 record (browsers without Ed25519
+WebCrypto), only the service signs: **the ContentProof service attests that
+`<email>` submitted `<hash>` at `<timestamp>`**, with no signature by you and
+no non-repudiation by the user. Either way, verifiers trust ContentProof's
 published public key and its sign-in check. It does not prove authorship or
 ownership of the file.
 

@@ -12,7 +12,7 @@ export default async function Home() {
     <div className="flex justify-center">
       {session ? (
         <div className="flex flex-col items-center gap-2">
-          <p className="text-sm text-light-500">
+          <p className="text-sm text-mute">
             Signed in as {session.user?.email}
           </p>
           <AccountStatus />

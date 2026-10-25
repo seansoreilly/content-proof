@@ -3,7 +3,7 @@ import path from "path";
 import { marked } from "marked";
 
 export const metadata = {
-  title: "Privacy Policy – Content Proof",
+  title: "Privacy · ContentProof",
 };
 
 export default async function PrivacyPage() {
@@ -16,7 +16,7 @@ export default async function PrivacyPage() {
   const html = marked.parse(source);
 
   return (
-    <article className="prose mx-auto px-4 py-20 dark:prose-invert">
+    <article className="prose mx-auto px-4 py-16 dark:prose-invert">
       {/* biome-ignore-next-line: react/no-danger */}
       <div dangerouslySetInnerHTML={{ __html: html }} />
     </article>
