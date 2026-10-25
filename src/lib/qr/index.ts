@@ -19,7 +19,7 @@ export async function generateQrCodeDataUrl(
     errorCorrectionLevel?: "L" | "M" | "Q" | "H";
   } = {}
 ): Promise<string> {
-  const { default: QRCode } = await getQrCodeModule();
+  const QRCode = await getQrCodeModule();
   const { width = 288, errorCorrectionLevel = "M" } = options;
 
   return QRCode.toDataURL(text, {

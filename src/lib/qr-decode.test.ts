@@ -27,16 +27,16 @@ function rasterise(text: string, scale = 4, quiet = 4): RgbaImage {
 }
 
 describe("QR image decoding", () => {
-  it("recovers a verification link from a rendered QR code", () => {
+  it("recovers a verification link from a rendered QR code", async () => {
     const link =
       "https://contentproof.app/verify#P=2~AbCdEfGhIjKlMnOp~" +
       "ynaStIpiV1kaNshAtSXa9WoVevwJH_X1cX9LO2bkMtA~someone%40example.com~1792808090322~" +
       "vS0UFPUwHc1CiDtNQ_bCqdhrtktHaRS6miowhIyJbsDB-RuIyGYGKS4iHjskA99I4VZrCEyV7bHaFZzpADpQDw";
-    expect(decodeQrImageData(rasterise(link))).toBe(link);
+    expect(await decodeQrImageData(rasterise(link))).toBe(link);
   });
 
-  it("returns null for an image with no QR code", () => {
+  it("returns null for an image with no QR code", async () => {
     const blank: RgbaImage = { data: new Uint8ClampedArray(64 * 64 * 4).fill(255), width: 64, height: 64 };
-    expect(decodeQrImageData(blank)).toBeNull();
+    expect(await decodeQrImageData(blank)).toBeNull();
   });
 });
