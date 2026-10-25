@@ -42,7 +42,7 @@ export default async function RecordPage({
   });
 
   return (
-    <main className="mx-auto flex w-full max-w-[42rem] flex-col items-center gap-8 px-4 py-10 md:py-16">
+    <div className="mx-auto flex w-full max-w-[42rem] flex-col items-center gap-8 px-4 py-10 md:py-16">
       <h1 className="self-start">Record</h1>
 
       <Seal rimText={rimTextFor(record)} size={288}>
@@ -80,6 +80,6 @@ export default async function RecordPage({
           keys at <code className="font-mono">/.well-known/public-keys.json</code>.
         </p>
       </div>
-    </main>
+    </div>
   );
 }

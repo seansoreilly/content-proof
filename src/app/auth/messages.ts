@@ -1,6 +1,7 @@
 /** Branded explanation for a NextAuth `error` query value. */
 export function authErrorMessage(error: string | undefined): string | null {
-  if (!error) return null;
+  // NextAuth redirects to the error page with `error=undefined` when it has no code.
+  if (!error || error === "undefined") return null;
   switch (error) {
     case "AccessDenied":
       return "This Google account isn't permitted to sign in here. ContentProof is limited to approved email domains.";

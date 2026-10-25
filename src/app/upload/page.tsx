@@ -12,7 +12,7 @@ export default async function UploadPage(): Promise<ReactElement> {
   const session = await getServerSession(authOptions);
 
   return (
-    <main className="mx-auto w-full max-w-[42rem] px-4 py-10 sm:py-16">
+    <div className="mx-auto w-full max-w-[42rem] px-4 py-10 sm:py-16">
       <h1 className="mb-8">Sign a file</h1>
       {session ? (
         <Panel>
@@ -34,6 +34,6 @@ export default async function UploadPage(): Promise<ReactElement> {
         transparency log. The log feed shows only hashes, times and key ids, but
         anyone holding your link or seal sees your email.
       </p>
-    </main>
+    </div>
   );
 }

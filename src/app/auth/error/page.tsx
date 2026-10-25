@@ -13,7 +13,7 @@ export default async function AuthErrorPage({
   const message = authErrorMessage(firstParam(params.error)) ?? "Sign-in failed. Try again.";
 
   return (
-    <main className="mx-auto w-full max-w-[42rem] px-4 py-10 sm:py-16">
+    <div className="mx-auto w-full max-w-[42rem] px-4 py-10 sm:py-16">
       <Panel className="flex flex-col items-start gap-4">
         <Eyebrow>Sign-in error</Eyebrow>
         <p className="text-void" role="alert">
@@ -26,6 +26,6 @@ export default async function AuthErrorPage({
           </Button>
         </div>
       </Panel>
-    </main>
+    </div>
   );
 }

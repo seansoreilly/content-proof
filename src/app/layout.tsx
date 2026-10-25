@@ -62,10 +62,10 @@ export default function RootLayout({
             </span>
           </Link>
           <nav className="flex items-center gap-6 text-sm text-mute">
-            <Link href="/how-it-works" className="hover:text-ink">
+            <Link href="/how-it-works" className="-my-2 py-3 hover:text-ink">
               How it works
             </Link>
-            <Link href="/privacy" className="hover:text-ink">
+            <Link href="/privacy" className="-my-2 py-3 hover:text-ink">
               Privacy
             </Link>
           </nav>

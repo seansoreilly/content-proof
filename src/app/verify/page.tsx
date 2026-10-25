@@ -238,7 +238,7 @@ function VerifyPageContent() {
   const attestedMs = loaded?.kind === "record" ? loaded.record.t : (loaded?.payload.timestamp ?? 0);
 
   return (
-    <main className="mx-auto flex w-full max-w-[42rem] flex-col gap-6 px-4 py-10 md:py-16">
+    <div className="mx-auto flex w-full max-w-[42rem] flex-col gap-6 px-4 py-10 md:py-16">
       <h1>Verify</h1>
 
       {(inputError || keysError) && (
@@ -418,7 +418,7 @@ function VerifyPageContent() {
           Back to home
         </Button>
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -426,11 +426,11 @@ export default function VerifyPage(): React.JSX.Element {
   return (
     <Suspense
       fallback={
-        <main className="mx-auto w-full max-w-[42rem] px-4 py-10 md:py-16">
+        <div className="mx-auto w-full max-w-[42rem] px-4 py-10 md:py-16">
           <Panel>
             <p className="eyebrow">Loading verification…</p>
           </Panel>
-        </main>
+        </div>
       }
     >
       <VerifyPageContent />

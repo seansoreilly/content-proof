@@ -15,7 +15,7 @@ export default async function SignInPage({
   const message = authErrorMessage(firstParam(params.error));
 
   return (
-    <main className="mx-auto w-full max-w-[42rem] px-4 py-10 sm:py-16">
+    <div className="mx-auto w-full max-w-[42rem] px-4 py-10 sm:py-16">
       <Panel className="flex flex-col items-start gap-4">
         <Eyebrow>Sign in</Eyebrow>
         {message && (
@@ -26,6 +26,6 @@ export default async function SignInPage({
         <p>Sign in with Google to sign files. Verifying a file needs no account.</p>
         <SignInButton callbackUrl={callbackUrl ?? "/"} />
       </Panel>
-    </main>
+    </div>
   );
 }
