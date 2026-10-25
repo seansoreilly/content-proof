@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import QRCode from "qrcode";
 import { encodeRecord } from "@/lib/record";
 import { getLogStore, getRecordStore } from "@/lib/redis";
+import { rimTextFor } from "@/lib/seal-image";
+import { Seal } from "@/components/Seal";
+import { Button, RecordSummary } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +20,7 @@ export default async function RecordPage({
   params,
 }: {
   params: Promise<{ signature: string }>;
-}) {
+}): Promise<React.JSX.Element> {
   const { signature } = await params;
   if (!SIGNATURE_RE.test(signature)) notFound();
 
@@ -27,61 +31,50 @@ export default async function RecordPage({
   const encoded = encodeRecord(record);
   const verifyHref = `/verify#P=${encoded}`;
 
+  // qrcode's default modules are black on white, which is what the seal requires.
+  const qrDataUrl = await QRCode.toDataURL(verifyHref, {
+    width: 512,
+    errorCorrectionLevel: "M",
+    margin: 1,
+  });
+
   return (
-    <main className="relative flex flex-col items-center justify-center min-h-screen p-4">
-      <div className="absolute top-6 left-6">
-        <Link href="/" aria-label="Back to home" className="btn-secondary">
-          ← Home
-        </Link>
-      </div>
+    <main className="mx-auto flex w-full max-w-[42rem] flex-col items-center gap-8 px-4 py-10 md:py-16">
+      <h1 className="self-start">Record</h1>
 
-      <h1 className="text-blue-600 text-3xl md:text-5xl font-extrabold mb-8 text-center">Record</h1>
+      <Seal rimText={rimTextFor(record)} size={288}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={qrDataUrl}
+          alt="QR code for this record's verification link"
+          className="h-full w-full"
+        />
+      </Seal>
 
-      <div className="glass p-6 w-full max-w-md space-y-4 text-sm text-light-600">
-        <p>
-          <span className="text-light-500">Attested for:</span>{" "}
-          <span className="font-medium break-all">{record.e}</span>
-        </p>
-        <p>
-          <span className="text-light-500">At:</span>{" "}
-          <span className="font-medium">{new Date(record.t).toISOString()}</span>
-        </p>
-        <p>
-          <span className="text-light-500">File SHA-256 (base64url):</span> <code className="text-xs break-all">{record.h}</code>
-        </p>
-        <p>
-          <span className="text-light-500">Service key id:</span> <code className="text-xs">{record.k}</code>
-        </p>
-        <p>
-          <span className="text-light-500">Account holder&apos;s key:</span>{" "}
-          {record.u ? <code className="text-xs break-all">{record.u}</code> : "none (service attestation only)"}
-        </p>
-        <p>
-          <span className="text-light-500">Transparency log:</span>{" "}
-          {logIndex === null ? (
-            "not recorded"
-          ) : (
-            <>
-              entry <code className="text-xs">{logIndex}</code>{" "}
-              <Link className="underline" href={`/api/log/proof?index=${logIndex}`}>
-                (inclusion proof)
-              </Link>
-            </>
-          )}
-        </p>
+      <div className="flex w-full flex-col gap-4">
+        <RecordSummary record={record} showHash logIndex={logIndex} timeFormat="iso" />
+        {logIndex !== null && (
+          <p>
+            <Link className="text-accent underline" href={`/api/log/proof?index=${logIndex}`}>
+              Inclusion proof for entry {logIndex}
+            </Link>
+          </p>
+        )}
 
-        <details className="pt-2">
-          <summary className="cursor-pointer text-light-500 select-none">Raw record</summary>
-          <code className="block mt-2 p-3 rounded-lg font-mono text-xs break-all bg-white/5">{encoded}</code>
+        <details>
+          <summary className="eyebrow cursor-pointer select-none">Raw record</summary>
+          <code className="mt-2 block break-all bg-paper p-3 font-mono text-[13px] shadow-pressed">
+            {encoded}
+          </code>
         </details>
 
-        <Link href={verifyHref} className="btn-primary w-full flex items-center justify-center mt-4">
-          Verify a file against this record
-        </Link>
+        <div>
+          <Button href={verifyHref}>Verify a file against this record</Button>
+        </div>
 
-        <p className="text-xs text-light-400 pt-2">
+        <p className="text-sm text-mute">
           This page is a convenience. The record is self-contained and verifiable without it, using the
-          keys at <code>/.well-known/public-keys.json</code>.
+          keys at <code className="font-mono">/.well-known/public-keys.json</code>.
         </p>
       </div>
     </main>

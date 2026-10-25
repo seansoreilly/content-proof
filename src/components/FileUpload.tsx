@@ -8,6 +8,7 @@ import { MAX_FILE_SIZE_BYTES, sha256Hash } from "@/lib/hash";
 import { buildSignedMessage, parseRecordObject, type SignatureRecord } from "@/lib/record";
 import { getOrCreateUserKey, type UserSigningKey } from "@/lib/user-keys";
 import { trackSignFile } from "@/lib/analytics";
+import { Eyebrow } from "@/components/ui";
 
 interface HashResult {
   fileName: string;
@@ -22,7 +23,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024).toFixed(2)} KB`;
 }
 
-export default function FileUpload() {
+export default function FileUpload(): React.JSX.Element {
   const [dragActive, setDragActive] = useState(false);
   const [hashResult, setHashResult] = useState<HashResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -158,132 +159,100 @@ export default function FileUpload() {
   const busy = stage !== "idle";
 
   return (
-    <div className="w-full max-w-lg mx-auto p-4">
+    <div className="w-full space-y-6">
       <div
-        className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 backdrop-blur-sm relative overflow-hidden ${
-          dragActive
-            ? "border-accent-blue bg-accent-blue/10 scale-105 glow-blue"
-            : "border-white/30 bg-white/5 hover:border-accent-purple/50 hover:bg-white/10"
+        role="button"
+        tabIndex={0}
+        className={`flex cursor-pointer flex-col items-center justify-center gap-2 p-6 text-center shadow-pressed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:p-8 ${
+          dragActive ? "bg-tint" : "bg-paper"
         }`}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onClick={onButtonClick}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onButtonClick();
+          }
+        }}
       >
         <input id="fileInput" type="file" ref={inputRef} className="hidden" onChange={onFileChange} />
 
-        <div
-          className={`w-12 h-12 mb-4 rounded-full flex items-center justify-center transition-all duration-300 ${
-            dragActive ? "bg-accent-blue/20 scale-110" : "bg-white/10"
-          }`}
-        >
-          <svg
-            className={`w-6 h-6 transition-colors duration-300 ${dragActive ? "text-accent-blue" : "text-light-500"}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-            />
-          </svg>
-        </div>
-
-        <p className="text-light-600 text-center mb-2">
-          <span className="font-semibold text-accent-blue">
-            {dragActive ? "Drop your file here" : "Drag & drop a file here"}
-          </span>
-        </p>
-
-        <p className="text-light-500 text-sm text-center">
-          or <span className="font-semibold text-accent-blue hover:text-accent-purple transition-colors">browse files</span>
-        </p>
-
-        <p className="text-xs text-light-400 mt-2 text-center">
+        <Eyebrow>Choose a file</Eyebrow>
+        <p>{dragActive ? "Drop your file here" : "Drag a file here, or click to browse."}</p>
+        <p className="text-sm text-mute">
           Any file type up to {MAX_FILE_SIZE_LABEL}. The file never leaves your browser; only its
           fingerprint is sent.
         </p>
       </div>
 
       {busy && (
-        <div className="glass mt-4 p-4 flex items-center justify-center gap-3">
-          <div className="w-5 h-5 border-2 border-accent-blue/30 border-t-accent-blue rounded-full animate-spin"></div>
-          <p className="text-accent-blue font-medium">
-            {stage === "hashing" ? "Fingerprinting your file…" : "Requesting attestation…"}
-          </p>
-        </div>
+        <p className="text-mute" role="status">
+          {stage === "hashing" ? "Hashing…" : "Signing…"}
+        </p>
       )}
 
       {error && (
-        <div className="glass mt-4 p-4 border border-red-400/30 bg-red-400/10">
-          <p className="text-red-400 font-medium">{error}</p>
-        </div>
+        <p className="font-semibold text-void" role="alert">
+          {error}
+        </p>
       )}
 
       {previewUrl && (
-        <details className="glass mt-4 p-4">
-          <summary className="cursor-pointer font-medium text-light-600 select-none">Preview</summary>
-          <div className="relative rounded-lg overflow-hidden mt-4">
+        <details>
+          <summary className="eyebrow cursor-pointer select-none">Preview</summary>
+          <div className="mt-3 p-3 shadow-pressed">
             <Image
               src={previewUrl}
               alt="File preview"
               width={256}
               height={256}
               unoptimized
-              className="max-h-64 w-full object-contain bg-white/5 rounded-lg"
+              className="max-h-64 w-full object-contain"
             />
           </div>
         </details>
       )}
 
       {hashResult && (
-        <div className="glass mt-4 p-4 space-y-2 text-sm">
-          <div className="flex justify-between items-center gap-4">
-            <span className="text-light-500">File</span>
-            <span className="font-medium text-light-600 truncate">{hashResult.fileName}</span>
+        <dl className="grid gap-4">
+          <div>
+            <dt className="eyebrow">File</dt>
+            <dd className="mt-1 break-all">{hashResult.fileName}</dd>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-light-500">Size</span>
-            <span className="font-medium text-light-600">{formatSize(hashResult.fileSize)}</span>
+          <div>
+            <dt className="eyebrow">Size</dt>
+            <dd className="mt-1">{formatSize(hashResult.fileSize)}</dd>
           </div>
-          <details>
-            <summary className="cursor-pointer text-light-500 select-none">SHA-256 fingerprint</summary>
-            <code className="block mt-2 p-3 rounded-lg font-mono text-xs text-light-600 break-all bg-white/5">
-              {hashResult.hash}
-            </code>
-          </details>
-        </div>
+          <div>
+            <dt className="eyebrow">SHA-256</dt>
+            <dd className="mt-1 break-all font-mono text-[13px]">{hashResult.hash}</dd>
+          </div>
+        </dl>
       )}
 
-      {record && (
-        <div className="glass mt-4 p-4">
-          <p className="font-medium text-accent-purple mb-4">Verification QR code</p>
-          <QrCodeGenerator record={record} />
-        </div>
-      )}
+      {record && <QrCodeGenerator record={record} />}
 
-      <div className="glass mt-4 p-4 text-xs text-light-500 space-y-1" data-testid="user-key">
+      <div className="space-y-2" data-testid="user-key">
         {userKey === "unsupported" ? (
-          <p>
+          <p className="text-sm text-mute">
             This browser cannot hold a signing key, so records are service attestations only. A current
             Chrome, Firefox or Safari adds your own signature.
           </p>
         ) : userKey ? (
           <>
-            <p className="text-light-600 font-medium">Your signing key (this browser)</p>
-            <code className="block break-all">{userKey.publicKey}</code>
-            <p>
+            <Eyebrow>Your signing key (this browser)</Eyebrow>
+            <code className="block break-all font-mono text-[13px]">{userKey.publicKey}</code>
+            <p className="text-sm text-mute">
               Records you create here carry a signature made with this key. It never leaves this device.
               Publish this key where people can find you so they can tie your records to you, not just to
               your account.
             </p>
           </>
         ) : (
-          <p>Preparing your signing key…</p>
+          <p className="text-sm text-mute">Preparing your signing key…</p>
         )}
       </div>
     </div>

@@ -2,7 +2,6 @@
 
 import React, { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { sha256Hash } from "@/lib/hash";
 import {
@@ -17,6 +16,7 @@ import { decodeQrFile } from "@/lib/qr-decode";
 import { extractPayloadFromUrl, type SignatureRecord } from "@/lib/record";
 import { parseVerificationInput, type LoadedInput as Loaded } from "@/lib/verify-input";
 import { trackVerifySignature } from "@/lib/analytics";
+import { Button, FileField, Panel, TextArea, TextField, VerifyResult } from "@/components/ui";
 
 const parseInput = parseVerificationInput;
 
@@ -195,223 +195,199 @@ function VerifyPageContent() {
   }, [loaded, file, keys, legacyEmail]);
 
   const canVerify = Boolean(loaded && file && keys) && status !== "verifying";
+  const attestedFor = loaded?.kind === "record" ? loaded.record.e : legacyEmail.trim();
+  const attestedAt = new Date(
+    loaded?.kind === "record" ? loaded.record.t : loaded?.payload.timestamp ?? 0
+  ).toLocaleString();
 
   return (
-    <main className="relative flex flex-col items-center justify-center min-h-screen overflow-hidden p-4">
-      <div className="absolute top-6 left-6">
-        <Link href="/" aria-label="Back to home" className="btn-secondary">
-          ← Home
-        </Link>
-      </div>
-
-      <h1 className="text-blue-600 text-3xl md:text-5xl font-extrabold mb-8 text-center">Verify</h1>
+    <main className="mx-auto flex w-full max-w-[42rem] flex-col gap-6 px-4 py-10 md:py-16">
+      <h1>Verify</h1>
 
       {(inputError || keysError) && (
-        <div className="glass p-4 border border-red-400/30 bg-red-50 max-w-md mb-6">
-          <p className="text-red-400 font-medium text-center">{inputError ?? keysError}</p>
-        </div>
+        <Panel>
+          <p className="font-medium text-void" role="alert">
+            {inputError ?? keysError}
+          </p>
+        </Panel>
       )}
 
-      <div className="glass p-6 w-full max-w-md space-y-6">
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold text-light-600">Step 1: Load the record</h2>
+      <Panel className="flex flex-col gap-6">
+        <section className="flex flex-col gap-4">
+          <h2 className="eyebrow">Load the record</h2>
 
           {!loaded ? (
-            <div className="space-y-3">
-              <label htmlFor="recordInput" className="block text-sm font-medium text-light-600">
-                Paste a verification link or record
-              </label>
-              <textarea
+            <div className="flex flex-col gap-4">
+              <TextArea
                 id="recordInput"
-                className="glass w-full px-3 py-2 text-light-600 min-h-[100px] resize-y"
+                label="Paste a verification link or record"
+                className="min-h-[100px] resize-y break-all"
                 placeholder="https://…/verify#P=2~…  or  2~…"
                 value={manualInput}
                 onChange={(e) => setManualInput(e.target.value)}
               />
-              <button className="btn-primary w-full" onClick={loadManual} disabled={!manualInput.trim()}>
-                Load record
-              </button>
-              <div className="space-y-2 pt-2">
-                <label htmlFor="qrImageInput" className="block text-sm font-medium text-light-600">
-                  Or upload a picture of the QR code
-                </label>
-                <input
-                  id="qrImageInput"
-                  type="file"
-                  accept="image/*"
-                  disabled={decodingQr}
-                  onChange={onQrImageChange}
-                  className="glass w-full px-3 py-2 text-light-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700"
-                />
-                {decodingQr && <p className="text-xs text-light-500">Reading QR code…</p>}
+              <div>
+                <Button onClick={loadManual} disabled={!manualInput.trim()}>
+                  Load record
+                </Button>
               </div>
+              <FileField
+                id="qrImageInput"
+                label="Or upload a picture of the QR code"
+                accept="image/*"
+                disabled={decodingQr}
+                onChange={onQrImageChange}
+                hint={decodingQr ? "Reading QR code…" : undefined}
+              />
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-4">
               {/* Neutral until verified: nothing in a record is trustworthy before the check. */}
-              <div className="glass p-4 border border-white/20 bg-white/5 text-sm space-y-1">
-                <p className="text-light-500 text-xs uppercase tracking-wide">Record loaded, not yet verified</p>
+              <VerifyResult tone="pending" title="Record loaded, not yet verified">
                 {loaded.kind === "record" ? (
-                  <>
-                    <p className="text-light-600">
-                      <span className="text-light-500">Claims to be for:</span>{" "}
-                      <span className="font-medium break-all">{loaded.record.e}</span>
+                  <div className="flex flex-col gap-1">
+                    <p>
+                      <span className="text-mute">Claims to be for:</span>{" "}
+                      <span className="break-words font-medium">{loaded.record.e}</span>
                     </p>
-                    <p className="text-light-600">
-                      <span className="text-light-500">At:</span>{" "}
+                    <p>
+                      <span className="text-mute">At:</span>{" "}
                       <span className="font-medium">{new Date(loaded.record.t).toLocaleString()}</span>
                     </p>
-                    <p className="text-light-600">
-                      <span className="text-light-500">Key:</span> <code className="text-xs">{loaded.record.k}</code>
+                    <p>
+                      <span className="text-mute">Key:</span>{" "}
+                      <code className="break-all font-mono text-[13px]">{loaded.record.k}</code>
                     </p>
-                  </>
+                  </div>
                 ) : (
-                  <>
-                    <p className="text-light-600">
-                      <span className="text-light-500">Legacy record from:</span>{" "}
+                  <div className="flex flex-col gap-1">
+                    <p>
+                      <span className="text-mute">Legacy record from:</span>{" "}
                       <span className="font-medium">{new Date(loaded.payload.timestamp).toLocaleString()}</span>
                     </p>
-                    <p className="text-light-500 text-xs">
+                    <p className="text-sm text-mute">
                       Older records do not include the signer&apos;s address, so you will need to enter it.
                     </p>
-                  </>
+                  </div>
                 )}
+              </VerifyResult>
+              <div>
+                <Button variant="secondary" onClick={clearLoaded}>
+                  Load a different record
+                </Button>
               </div>
-              <button className="btn-secondary w-full text-sm" onClick={clearLoaded}>
-                Load a different record
-              </button>
             </div>
           )}
         </section>
 
-        <div className="border-t border-light-300/20"></div>
+        <div className="h-px bg-relief" aria-hidden="true"></div>
 
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold text-light-600">Step 2: Check the file</h2>
+        <section className="flex flex-col gap-4">
+          <h2 className="eyebrow">Check the file</h2>
 
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <label htmlFor="fileInput" className="block text-sm font-medium text-light-600">
-                Select the file to check
-              </label>
-              <input
-                id="fileInput"
-                type="file"
-                onChange={onFileChange}
-                className="glass w-full px-3 py-2 text-light-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700"
-              />
-            </div>
+          <FileField id="fileInput" label="Select the file to check" onChange={onFileChange} />
 
-            {loaded?.kind === "legacy" && (
-              <div className="space-y-2">
-                <label htmlFor="emailInput" className="block text-sm font-medium text-light-600">
-                  Signer&apos;s Google account email
-                </label>
-                <input
-                  id="emailInput"
-                  type="email"
-                  className="glass w-full px-3 py-2 text-light-600"
-                  placeholder="Email used when the file was signed"
-                  value={legacyEmail}
-                  onChange={(e) => setLegacyEmail(e.target.value)}
-                />
-              </div>
-            )}
+          {loaded?.kind === "legacy" && (
+            <TextField
+              id="emailInput"
+              type="email"
+              label="Signer's Google account email"
+              placeholder="Email used when the file was signed"
+              value={legacyEmail}
+              onChange={(e) => setLegacyEmail(e.target.value)}
+            />
+          )}
 
-            <button className="btn-primary w-full disabled:opacity-50 flex items-center justify-center gap-2" disabled={!canVerify} onClick={verify}>
-              {status === "verifying" && (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-              )}
-              {status === "verifying" ? "Checking…" : "Verify"}
-            </button>
-
-            <p className="text-xs text-light-400">
-              {keys
-                ? keys.source === "network"
-                  ? "Using ContentProof's currently published keys."
-                  : "Offline: using the last published keys this browser saw."
-                : keysError
-                  ? "Published keys could not be loaded."
-                  : "Loading published keys…"}
-            </p>
+          <div>
+            <Button disabled={!canVerify} onClick={verify}>
+              {status === "verifying" ? "Verifying…" : "Verify"}
+            </Button>
           </div>
+
+          <p className="text-sm text-mute">
+            {keys
+              ? keys.source === "network"
+                ? "Using ContentProof's currently published keys."
+                : "Offline: using the last published keys this browser saw."
+              : keysError
+                ? "Published keys could not be loaded."
+                : "Loading published keys…"}
+          </p>
         </section>
 
         {status === "done" && result && (
           <>
-            <div className="border-t border-light-300/20"></div>
-            <section className="space-y-3">
-              <h2 className="text-lg font-semibold text-light-600">Result</h2>
+            <div className="h-px bg-relief" aria-hidden="true"></div>
+            <section>
               {result.ok ? (
-                <div className="glass p-4 border border-green-400/30 bg-green-400/10 space-y-1">
-                  <p className="text-green-400 font-medium">Attestation verified</p>
-                  <p className="text-light-600 text-sm">
-                    ContentProof attests that{" "}
-                    <span className="font-medium">
-                      {loaded?.kind === "record" ? loaded.record.e : legacyEmail.trim()}
-                    </span>{" "}
-                    submitted this exact file on{" "}
-                    {new Date(
-                      loaded?.kind === "record" ? loaded.record.t : loaded?.payload.timestamp ?? 0
-                    ).toLocaleString()}
-                    .
-                  </p>
-                  {result.userSigned ? (
-                    <p className="text-light-500 text-xs" data-testid="user-signature">
-                      Also signed by the account holder&apos;s own key{" "}
-                      <code className="break-all">{result.userKey}</code>, which the service never holds.
-                      Service countersignature by published key <code>{result.keyId}</code>.
+                <VerifyResult tone="sealed" title="Attestation verified">
+                  <div className="flex flex-col gap-2">
+                    <p>
+                      ContentProof attests that <span className="break-words font-medium">{attestedFor}</span>{" "}
+                      submitted this exact file on {attestedAt}.
                     </p>
-                  ) : (
-                    <p className="text-light-500 text-xs" data-testid="user-signature">
-                      Signed with published key <code>{result.keyId}</code>. This is an attestation by the
-                      service only; the record carries no signature from a key the account holder controls.
-                    </p>
-                  )}
-                  {logStatus && (
-                    <p className="text-light-500 text-xs" data-testid="log-status">
-                      {logStatus.kind === "checking" && "Checking the transparency log…"}
-                      {logStatus.kind === "included" &&
-                        `Included in the transparency log as entry ${logStatus.index} of ${logStatus.size}; inclusion proof and signed tree head verified.`}
-                      {logStatus.kind === "absent" &&
-                        "Not present in the transparency log (the service may not have storage configured)."}
-                      {logStatus.kind === "invalid" &&
-                        "The transparency log proof did not verify. The record is valid, but the log should be treated with suspicion."}
-                      {logStatus.kind === "unavailable" && "Transparency log could not be reached."}
-                    </p>
-                  )}
-                </div>
+                    {result.userSigned ? (
+                      <p className="text-sm text-mute" data-testid="user-signature">
+                        Also signed by the account holder&apos;s own key{" "}
+                        <code className="break-all font-mono text-[13px]">{result.userKey}</code>, which the
+                        service never holds. Service countersignature by published key{" "}
+                        <code className="break-all font-mono text-[13px]">{result.keyId}</code>.
+                      </p>
+                    ) : (
+                      <p className="text-sm text-mute" data-testid="user-signature">
+                        Signed with published key{" "}
+                        <code className="break-all font-mono text-[13px]">{result.keyId}</code>. This is an
+                        attestation by the service only; the record carries no signature from a key the
+                        account holder controls.
+                      </p>
+                    )}
+                    {logStatus && (
+                      <p className="text-sm text-mute" data-testid="log-status">
+                        {logStatus.kind === "checking" && "Checking the transparency log…"}
+                        {logStatus.kind === "included" &&
+                          `Included in the transparency log as entry ${logStatus.index} of ${logStatus.size}; inclusion proof and signed tree head verified.`}
+                        {logStatus.kind === "absent" &&
+                          "Not present in the transparency log (the service may not have storage configured)."}
+                        {logStatus.kind === "invalid" &&
+                          "The transparency log proof did not verify. The record is valid, but the log should be treated with suspicion."}
+                        {logStatus.kind === "unavailable" && "Transparency log could not be reached."}
+                      </p>
+                    )}
+                  </div>
+                </VerifyResult>
               ) : (
-                <div className="glass p-4 border border-red-400/30 bg-red-400/10 space-y-1">
-                  <p className="text-red-400 font-medium">Not verified</p>
-                  <p className="text-light-600 text-sm">{FAILURE_MESSAGES[result.reason ?? "malformed"]}</p>
-                </div>
+                <VerifyResult tone="void" title="Not verified">
+                  <p>{FAILURE_MESSAGES[result.reason ?? "malformed"]}</p>
+                </VerifyResult>
               )}
             </section>
           </>
         )}
-      </div>
+      </Panel>
 
-      <div className="mt-8 max-w-md text-center">
-        <p className="text-sm text-light-500">
-          🔒 The file and the record stay in your browser. The only request made is for
-          ContentProof&apos;s published keys.
-        </p>
+      <p className="text-sm text-mute">
+        The file and the record stay in your browser. The only request made is for
+        ContentProof&apos;s published keys.
+      </p>
+
+      <div>
+        <Button variant="secondary" href="/">
+          Back to home
+        </Button>
       </div>
     </main>
   );
 }
 
-export default function VerifyPage() {
+export default function VerifyPage(): React.JSX.Element {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="glass p-8 flex items-center gap-3">
-            <div className="w-6 h-6 border-2 border-accent-blue/30 border-t-accent-blue rounded-full animate-spin"></div>
-            <span className="text-light-600">Loading verification…</span>
-          </div>
-        </div>
+        <main className="mx-auto w-full max-w-[42rem] px-4 py-10 md:py-16">
+          <Panel>
+            <p className="eyebrow">Loading verification…</p>
+          </Panel>
+        </main>
       }
     >
       <VerifyPageContent />

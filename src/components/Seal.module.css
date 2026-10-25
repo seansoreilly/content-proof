@@ -1,0 +1,33 @@
+.press {
+  animation: press 700ms ease-out 1;
+}
+
+@keyframes press {
+  0% {
+    transform: scale(1.05);
+    box-shadow:
+      inset 1px 1px 2px var(--relief-hi),
+      inset -2px -2px 4px var(--relief),
+      10px 14px 26px -8px var(--relief);
+  }
+  45% {
+    transform: scale(0.99);
+    box-shadow:
+      inset -1px -1px 2px var(--relief-hi),
+      inset 3px 3px 6px var(--relief),
+      1px 2px 4px -2px var(--relief);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow:
+      inset 1px 1px 2px var(--relief-hi),
+      inset -2px -2px 4px var(--relief),
+      6px 8px 18px -8px var(--relief);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .press {
+    animation: none;
+  }
+}

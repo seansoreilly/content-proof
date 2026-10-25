@@ -1,27 +1,29 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import AnimatedBackground from "./AnimatedBackground";
-import GradientHeading from "./GradientHeading";
-import { DevelopmentBuildInfo } from "./ui/BuildInfo";
 import { Session } from "next-auth";
+import { Button, Eyebrow } from "@/components/ui";
+import { Seal } from "@/components/Seal";
+import { rimTextFor } from "@/lib/seal-image";
+import { generateQrCodeDataUrl } from "@/lib/qr";
 
-const features = [
+const EXAMPLE_RIM = rimTextFor({
+  t: Date.UTC(2026, 9, 25, 3, 14),
+  k: "Kq2vR8mZ9pLw3XcT",
+});
+
+const POINTS = [
   {
-    title: "Signed attestations",
-    desc: "Your browser signs a record of your file's fingerprint, your Google account and the time with a key only you hold; ContentProof countersigns it.",
-    icon: "🔐",
+    title: "Your file stays with you",
+    text: "Your browser hashes the file. Only the SHA-256 fingerprint is sent, never the file itself.",
   },
   {
-    title: "QR code sharing",
-    desc: "The whole record travels in a QR code or link; no account needed to verify.",
-    icon: "📱",
+    title: "Two signatures",
+    text: "This browser's key signs first. ContentProof then countersigns who, what and when. The service never holds your key.",
   },
   {
     title: "Verify anywhere",
-    desc: "Checks run in the browser against our published keys and work offline once cached.",
-    icon: "🔒",
+    text: "Checks run in the browser against the published keys. No account is needed to verify.",
   },
 ];
 
@@ -30,105 +32,71 @@ interface LandingProps {
   session?: Session | null;
 }
 
-export default function Landing({ authSection, session }: LandingProps) {
+export default function Landing({
+  authSection,
+  session,
+}: LandingProps): React.JSX.Element {
   const [isHydrated, setIsHydrated] = useState(false);
+  const [qr, setQr] = useState<string | null>(null);
 
   useEffect(() => {
     setIsHydrated(true);
+    let cancelled = false;
+    generateQrCodeDataUrl("https://contentproof.app/verify", { width: 256 })
+      .then((url) => {
+        if (!cancelled) setQr(url);
+      })
+      .catch(() => {
+        // The seal keeps its blank centre.
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const isSignedIn = !!session;
 
   return (
-    <main className="relative flex flex-col items-center w-full overflow-hidden">
-      {/* Animated Background Orbs */}
-      <AnimatedBackground
-        orbs={[
-          "w-72 h-72 bg-accent-blue/20 -top-20 -left-20",
-          "w-96 h-96 bg-accent-purple/20 top-1/3 right-0",
-          "w-64 h-64 bg-accent-teal/20 bottom-0 left-1/4",
-        ]}
-      />
+    <div className="mx-auto flex max-w-2xl flex-col items-center px-4 py-10 text-center sm:py-16">
+      <Seal rimText={EXAMPLE_RIM}>
+        {qr ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={qr} alt="Example record QR code" className="h-full w-full" />
+        ) : (
+          <div className="h-full w-full bg-white" />
+        )}
+      </Seal>
 
-      {/* Hero */}
-      <section className="py-32 px-4 text-center max-w-4xl">
-        {/* Security Badge */}
-        <div className="inline-flex items-center gap-2 glass px-4 py-2 mb-6">
-          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse-slow"></div>
-          <span className="text-sm text-light-600 font-medium">
-            Secure • Ed25519 Verified
-          </span>
-        </div>
+      <h1 className="mt-10">Attested.</h1>
+      <p className="mt-6 max-w-[60ch]">
+        Hash a file in your browser and receive a sealed record of who
+        submitted it and when. Anyone can check the seal against our published
+        keys, with no account and no upload.
+      </p>
 
-        <GradientHeading className="text-4xl md:text-6xl mb-6">
-          Content&nbsp;Proof
-        </GradientHeading>
-        <p className="text-lg md:text-2xl text-dark-blue-400 mb-8 max-w-2xl mx-auto">
-          Get a signed attestation that your Google account submitted a file&apos;s
-          fingerprint at a given time, and let anyone verify it in seconds.
-        </p>
+      {authSection && <div className="mt-8">{authSection}</div>}
 
-        {/* Authentication Section */}
-        {authSection && <div className="mb-8">{authSection}</div>}
+      <div className="mt-8 flex flex-col gap-4 sm:flex-row">
+        <Button
+          href="/upload"
+          disabled={!isHydrated || !isSignedIn}
+          disabledReason="Sign in to sign a file"
+        >
+          Sign a file
+        </Button>
+        <Button variant="secondary" href="/verify">
+          Verify a file
+        </Button>
+      </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          {!isHydrated ? (
-            // Show placeholder during hydration to prevent mismatch
-            <button
-              className="btn-primary opacity-50 cursor-not-allowed"
-              disabled
-            >
-              Sign a file
-            </button>
-          ) : isSignedIn ? (
-            <Link href="/upload" className="btn-primary">
-              Sign a file
-            </Link>
-          ) : (
-            <button
-              className="btn-primary opacity-50 cursor-not-allowed"
-              disabled
-              title="Please sign in to upload files"
-            >
-              Sign a file
-            </button>
-          )}
-          <Link href="/verify" className="btn-secondary">
-            Verify a file
-          </Link>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="grid gap-8 md:grid-cols-3 px-6 pb-32 max-w-6xl">
-        {features.map((f, idx) => (
-          <div
-            key={f.title}
-            style={{ animationDelay: `${idx * 200}ms` }}
-            className="glass p-6 card-hover animate-float"
-          >
-            <div className="text-3xl mb-3">{f.icon}</div>
-            <h3 className="font-semibold text-lg mb-2 text-light-600">
-              {f.title}
-            </h3>
-            <p className="text-sm text-light-500">{f.desc}</p>
-          </div>
+      <div className="mt-16 flex max-w-[60ch] flex-col gap-8 text-left">
+        {POINTS.map((p) => (
+          <section key={p.title}>
+            <Eyebrow>{p.title}</Eyebrow>
+            <p className="mt-2">{p.text}</p>
+          </section>
         ))}
-      </section>
-
-      {/* Trust Indicators */}
-      <section className="w-full bg-white/5 backdrop-blur-sm py-12 border-t border-white/10">
-        <p className="text-center text-sm text-light-500">
-          Attestations signed with Ed25519 and verified against published keys
-        </p>
-      </section>
-
-      {/* Footer with Links & Build Info */}
-      <footer className="mt-16 pt-8 border-t border-gray-200 space-y-4 text-center">
-        <div className="flex justify-center gap-4 text-sm text-light-500">
-        </div>
-        <DevelopmentBuildInfo />
-      </footer>
-    </main>
+      </div>
+    </div>
   );
 }
