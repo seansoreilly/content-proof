@@ -13,7 +13,7 @@ discussion to fold in new terms.
 | **Statement** | The UTF-8 string `<hash_hex>:<email>:<timestamp>` that the account holder signs and that a version 2 record's service signature covers. | Signed message, message, data to sign |
 | **Countersigned statement** | The statement extended with the account holder's key and signature, which the service signature covers in a version 3 record. | Service message, v3 message |
 | **Hash** | The SHA-256 digest of the file, hex in the statement and base64url in the payload. | Fingerprint, digest, checksum |
-| **Timestamp** | The moment the service issued the record, in milliseconds since the Unix epoch. | Issued at, signed at, date |
+| **Timestamp** | The time named in the statement, in milliseconds since the Unix epoch, chosen by the browser for version 3 (within a server-checked skew window) and by the service for version 2. | Issued at, signed at, date, server time |
 | **Service signature** | The Ed25519 signature by the service key over the statement or countersigned statement; it also serves as the record's lookup key. | Signature (unqualified), s, sig |
 | **Account holder signature** | The Ed25519 signature by the account holder key over the statement, present only in version 3 records. | User signature, usig, us |
 | **Record version** | The format number leading the payload: 2 for service attestation only, 3 for account holder signature plus countersignature. | Format version, payload version |
@@ -85,7 +85,7 @@ discussion to fold in new terms.
 
 > **Dev:** "The record has two signatures. Which one is whose?"
 
-> **Domain expert:** "The **Service signature** is always there and is made with the **Service key** named by the **Key id**. In a **Version 3 record** there is also an **Account holder signature**, made with the **Account holder key** that lives in that person's browser. The service signs over the **Countersigned statement**, which includes the account holder's key and signature, so you check the account holder's first and the service's second."
+> **Domain expert:** "The **Service signature** is always there and is made with the **Service key** named by the **Key id**. In a **Version 3 record** there is also an **Account holder signature**, made with the **Account holder key** that lives in that person's browser. The service signs over the **Countersigned statement**, which includes the account holder's key and signature, so you check both."
 
 > **Dev:** "And if both check out, is that proof the account holder made the file?"
 
@@ -111,6 +111,6 @@ discussion to fold in new terms.
 - **Version 2 and version 3 need plain-language names.** The verifier reports which it saw. Say **Version 2 record (service attestation only)** and **Version 3 record (account holder signature plus countersignature)** on first use; do not invent "basic" or "full".
 - **"Older records" versus legacy.** The verify page says "older records" for the `?data=` JSON format. Use **Legacy record** so it is not confused with a version 2 record, which is current but service-only.
 - **Record store is not the log.** Both are in Redis and both hold records, so "the store" and "the log" get swapped. The **Transparency log** is append-only with a Merkle tree; the **Record store** is an optional lookup by service signature.
-- **Stale PRD terms.** The PRD describes a trust level (basic/enhanced/premium), a UUID `id` field, a `pk` identifier, ISO 8601 timestamps, a JSON payload, and a 10 MB limit. None of these shipped. They are not aliases; they are superseded. Treat the README and ADR 0001 as current.
+- **Stale PRD terms.** The PRD describes a trust level (basic/enhanced/premium), a UUID `id` field, a `pk` identifier, ISO 8601 timestamps, and a 10 MB limit. None of these shipped. Its JSON payload shipped only as the `?data=` form that is now the **Legacy record**. These are not aliases; they are superseded. Treat the README and ADR 0001 as current.
 - **Product name spelling.** Both "ContentProof" and "Content Proof" are used (README versus page titles and user guide). Pick one; this glossary uses **ContentProof** because that is how the code, README, and ADR write it.
 - **README opening claim.** "You hold no key" describes version 2 only and contradicts version 3. The sentence should say the service key is not the account holder's key, and point to the version 3 section.
