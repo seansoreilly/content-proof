@@ -20,9 +20,21 @@ export function firstParam(value: string | string[] | undefined): string | undef
   return Array.isArray(value) ? value[0] : value;
 }
 
-/** Only same-site relative paths are honoured; anything else is ignored. */
+/**
+ * Only same-site destinations are honoured: a relative path, or an absolute
+ * URL on this deployment's own origin (NextAuth itself redirects to the
+ * sign-in page with an absolute callbackUrl). Anything else is ignored.
+ */
 export function safeCallbackUrl(value: string | string[] | undefined): string | undefined {
   const first = firstParam(value);
-  if (!first || !first.startsWith("/") || first.startsWith("//") || first.includes("\\")) return undefined;
-  return first;
+  if (!first || first.includes("\\")) return undefined;
+  if (first.startsWith("/")) return first.startsWith("//") ? undefined : first;
+  try {
+    const url = new URL(first);
+    const own = process.env.NEXTAUTH_URL ? new URL(process.env.NEXTAUTH_URL).origin : null;
+    if (own && url.origin === own) return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    // not a URL
+  }
+  return undefined;
 }
