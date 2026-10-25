@@ -6,8 +6,8 @@
     "dev": "NODE_OPTIONS='--inspect' next dev --turbopack --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "deploy": "vercel --prod",
+    "lint": "eslint .",
+    "deploy": "npx --yes vercel --prod",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -15,32 +15,27 @@
     "@noble/hashes": "^2.4.0",
     "@upstash/redis": "^1.39.0",
     "jsqr": "^1.4.0",
-    "lucide-react": "^0.515.0",
     "marked": "^11.2.0",
     "next": "^15.5.28",
     "next-auth": "^4.24.11",
     "qrcode": "^1.5.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tweetnacl": "^1.0.3",
-    "webpack": "^5.90.3"
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/typography": "^0.5.16",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/qrcode": "^1.5.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/webpack": "^5.28.5",
     "autoprefixer": "^10.4.21",
     "eslint": "^9",
     "eslint-config-next": "^15.5.28",
     "postcss": "^8.5.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5",
-    "vercel": "^43.1.0",
-    "vitest": "^4.0.0",
-    "webpack": "^5.90.3"
+    "vitest": "^4.0.0"
   }
 }

@@ -8,23 +8,15 @@ export interface BuildInfo {
 }
 
 /**
- * Get build information injected at build time
+ * Get build information inlined at build time via the `env` key in
+ * `next.config.ts`. Each value is read with a literal `process.env.X` access
+ * so the bundler can substitute it.
  */
 export function getBuildInfo(): BuildInfo {
-  // Safe access to potentially undefined globals (especially in Turbopack/dev mode)
-  const commitHash =
-    (typeof __COMMIT_HASH__ !== "undefined" ? __COMMIT_HASH__ : null) ||
-    "unknown";
-  const buildTime =
-    (typeof __BUILD_TIME__ !== "undefined" ? __BUILD_TIME__ : null) ||
-    "unknown";
-  const buildVersion =
-    (typeof __BUILD_VERSION__ !== "undefined" ? __BUILD_VERSION__ : null) ||
-    "unknown";
-  const environment =
-    (typeof __NODE_ENV__ !== "undefined" ? __NODE_ENV__ : null) ||
-    process.env.NODE_ENV ||
-    "development";
+  const commitHash = process.env.NEXT_PUBLIC_BUILD_COMMIT || "unknown";
+  const buildTime = process.env.NEXT_PUBLIC_BUILD_TIME || "unknown";
+  const buildVersion = process.env.NEXT_PUBLIC_BUILD_VERSION || "unknown";
+  const environment = process.env.NODE_ENV || "development";
 
   return {
     commitHash,

@@ -205,8 +205,9 @@ platform packages from the lockfile and `npm ci` on npm 10 then refuses it.
 
 ## Deployment
 
-Deploy on [Vercel](https://vercel.com/) with `vercel --prod`, or build locally
-with `npm run build` and `npm start`. Set the required environment variables in
+Deploy on [Vercel](https://vercel.com/) with `npm run deploy` (runs the Vercel
+CLI via `npx`; the CLI is not a project dependency), or build locally with
+`npm run build` and `npm start`. Set the required environment variables in
 the host. Keep `ED25519_PRIVATE_KEY` secret; the public key is published at
 `/.well-known/public-keys.json`. To rotate, set a new keypair and move the old
 public key into `ED25519_PUBLIC_KEYS_PREVIOUS`.

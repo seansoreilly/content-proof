@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
 // Google Analytics helper utilities for client-side usage
 // Docs: https://developers.google.com/analytics/devguides/collection/ga4
 // Only loads in the browser – safe to import in client components
@@ -7,7 +6,6 @@ export const GA_TRACKING_ID =
   process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || "G-SXYXFW00DL";
 
 // Ensure TypeScript knows about the gtag function on window
-// @ts-ignore – extend Window interface at runtime
 declare global {
   interface Window {
     gtag: (...args: unknown[]) => void;

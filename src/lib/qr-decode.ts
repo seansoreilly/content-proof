@@ -1,13 +1,24 @@
-import jsQR from "jsqr";
-
 export interface RgbaImage {
   data: Uint8ClampedArray;
   width: number;
   height: number;
 }
 
+// jsQR is ~250 kB of source and only needed when someone uploads a QR image,
+// so it is imported lazily and the promise cached, as `qr/index.ts` does for
+// the encoder.
+let jsQrPromise: Promise<typeof import("jsqr")["default"]> | null = null;
+
+function getJsQr(): Promise<typeof import("jsqr")["default"]> {
+  if (!jsQrPromise) {
+    jsQrPromise = import("jsqr").then((m) => m.default);
+  }
+  return jsQrPromise;
+}
+
 /** Decode the text of a QR code from RGBA pixels, or null if none is found. */
-export function decodeQrImageData(image: RgbaImage): string | null {
+export async function decodeQrImageData(image: RgbaImage): Promise<string | null> {
+  const jsQR = await getJsQr();
   const result = jsQR(image.data, image.width, image.height, { inversionAttempts: "attemptBoth" });
   return result?.data ?? null;
 }
