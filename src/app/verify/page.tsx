@@ -16,7 +16,7 @@ import { formatLocalTime, toIsoUtc } from "@/lib/format-time";
 import { decodeQrFile } from "@/lib/qr-decode";
 import { extractPayloadFromUrl, type SignatureRecord } from "@/lib/record";
 import { parseVerificationInput, type LoadedInput as Loaded } from "@/lib/verify-input";
-import { trackVerifySignature } from "@/lib/analytics";
+import { track } from "@/lib/analytics";
 import { Button, FileField, Panel, TextArea, TextField, VerifyResult } from "@/components/ui";
 
 const parseInput = parseVerificationInput;
@@ -248,6 +248,7 @@ function VerifyPageContent() {
     }
     setInputError(null);
     setStatus("verifying");
+    track("verify_started", { record_kind: loaded.kind });
     try {
       const fileHash = await sha256Hash(file);
       if (runId.current !== myRun) return;
@@ -256,7 +257,11 @@ function VerifyPageContent() {
         loaded.kind === "record"
           ? verifyRecord(loaded.record, fileHash, keys.keys)
           : verifyLegacyPayload(loaded.payload, email, fileHash, keys.keys);
-      trackVerifySignature(outcome.ok ? "success" : "failure");
+      track("verify_signature", {
+        result: outcome.ok ? "success" : "failure",
+        record_kind: loaded.kind,
+        ...(outcome.ok ? {} : { failure_reason: outcome.reason ?? "unknown" }),
+      });
       setVerifiedEmail(email);
       setResult(outcome);
       if (outcome.ok && loaded.kind === "record") {

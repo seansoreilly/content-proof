@@ -6,7 +6,7 @@ import { QrCodeGenerator } from "@/components/QrCodeGenerator";
 import { MAX_FILE_SIZE_BYTES, sha256Hash } from "@/lib/hash";
 import { buildSignedMessage, parseRecordObject, type SignatureRecord } from "@/lib/record";
 import { getOrCreateUserKey, type UserSigningKey } from "@/lib/user-keys";
-import { trackSignFile } from "@/lib/analytics";
+import { track, type SignFailureType } from "@/lib/analytics";
 import { Eyebrow } from "@/components/ui";
 import { SignInButton } from "@/components/SignInButton";
 import { DropSeal } from "@/components/DropSeal";
@@ -22,6 +22,15 @@ const MAX_FILE_SIZE_LABEL = `${Math.round(MAX_FILE_SIZE_BYTES / (1024 * 1024))} 
 function formatSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   return `${(bytes / 1024).toFixed(2)} KB`;
+}
+
+class SignError extends Error {
+  constructor(
+    message: string,
+    readonly errorType: SignFailureType,
+  ) {
+    super(message);
+  }
 }
 
 interface FileUploadProps {
@@ -77,27 +86,33 @@ export default function FileUpload({ email }: FileUploadProps): React.JSX.Elemen
 
   // Any file type is fine: only its hash leaves the browser. The size cap is a
   // sanity bound, not a memory limit, because hashing is streamed.
-  const validateFile = (file: File): string | null => {
-    if (file.size === 0) return "The selected file is empty.";
+  const validateFile = (file: File): { message: string; errorType: SignFailureType } | null => {
+    if (file.size === 0) return { message: "The selected file is empty.", errorType: "empty_file" };
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      return `Files larger than ${MAX_FILE_SIZE_LABEL} are not supported.`;
+      return {
+        message: `Files larger than ${MAX_FILE_SIZE_LABEL} are not supported.`,
+        errorType: "file_too_large",
+      };
     }
     return null;
   };
 
-  const handleFiles = async (files: FileList | null) => {
+  const handleFiles = async (files: FileList | null, source: "drop" | "picker") => {
     if (!files || files.length === 0) return;
     resetState();
 
     const file = files[0];
     if (files.length > 1) setNote(`Only the first file, ${file.name}, was used.`);
+    const isImage = file.type.startsWith("image/");
+    track("file_selected", { source, is_image: isImage });
     const validationError = validateFile(file);
     if (validationError) {
-      setError(validationError);
+      setError(validationError.message);
+      track("sign_file_failed", { error_type: validationError.errorType });
       return;
     }
 
-    if (file.type.startsWith("image/")) {
+    if (isImage) {
       setPreviewUrl(URL.createObjectURL(file));
     }
 
@@ -125,18 +140,21 @@ export default function FileUpload({ email }: FileUploadProps): React.JSX.Elemen
 
       if (res.status === 401) {
         setNeedsSignIn(true);
-        throw new Error("Please sign in before signing a file.");
+        throw new SignError("Please sign in before signing a file.", "unauthorized");
       }
-      if (res.status === 429) throw new Error("Too many signing requests. Please wait a minute and try again.");
-      if (!res.ok) throw new Error(`Signing failed (${res.status}).`);
+      if (res.status === 429) {
+        throw new SignError("Too many signing requests. Please wait a minute and try again.", "rate_limited");
+      }
+      if (!res.ok) throw new SignError(`Signing failed (${res.status}).`, "server_error");
 
       const body = (await res.json()) as { record?: unknown };
       const signed = parseRecordObject(body.record);
-      if (!signed) throw new Error("The server returned an unexpected response.");
+      if (!signed) throw new SignError("The server returned an unexpected response.", "invalid_response");
       setRecord(signed);
-      trackSignFile();
+      track("sign_file", { key_type: key === "unsupported" ? "service_only" : "user_key", is_image: isImage });
     } catch (err) {
       console.error("File signing failed:", err);
+      track("sign_file_failed", { error_type: err instanceof SignError ? err.errorType : "unknown" });
       setError(err instanceof Error ? err.message : "Failed to generate signature.");
     } finally {
       setStage("idle");
@@ -166,7 +184,7 @@ export default function FileUpload({ email }: FileUploadProps): React.JSX.Elemen
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    void handleFiles(e.dataTransfer.files);
+    void handleFiles(e.dataTransfer.files, "drop");
   };
 
   const onButtonClick = () => {
@@ -176,7 +194,7 @@ export default function FileUpload({ email }: FileUploadProps): React.JSX.Elemen
   const onFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     // handleFiles reads the file before its first await, so the input can be
     // cleared right away; that lets choosing the same file again fire change.
-    void handleFiles(e.target.files);
+    void handleFiles(e.target.files, "picker");
     e.target.value = "";
   };
 
