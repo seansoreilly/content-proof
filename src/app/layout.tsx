@@ -3,7 +3,7 @@ import { Bricolage_Grotesque, Source_Serif_4, JetBrains_Mono } from "next/font/g
 import "./globals.css";
 import { AuthProvider } from "@/components/SessionProvider";
 import Script from "next/script";
-import { GA_TRACKING_ID } from "@/lib/analytics";
+import { GA_TRACKING_ID, gaInitScript } from "@/lib/analytics";
 import Link from "next/link";
 import { DevelopmentBuildInfo, SealMark } from "@/components/ui";
 
@@ -76,12 +76,7 @@ export default function RootLayout({
           strategy="afterInteractive"
         />
         <Script id="ga-init" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', '${GA_TRACKING_ID}');
-          `}
+          {gaInitScript()}
         </Script>
         <AuthProvider>
           <main className="min-h-screen">{children}</main>

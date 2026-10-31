@@ -6,6 +6,7 @@ import { createVerificationUrl, encodeRecord, type SignatureRecord } from "@/lib
 import { composeSealPng, rimTextFor } from "@/lib/seal-image";
 import { Seal } from "@/components/Seal";
 import { Button, Panel, RecordSummary } from "@/components/ui";
+import { track } from "@/lib/analytics";
 
 interface Props {
   /** The signed record returned by /api/sign. */
@@ -64,6 +65,7 @@ export const QrCodeGenerator: React.FC<Props> = ({ record, size = 288 }) => {
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
+      track("copy_record", { target });
       setCopied(target);
       setTimeout(() => setCopied(null), 2000);
     } catch (err) {
@@ -89,6 +91,7 @@ export const QrCodeGenerator: React.FC<Props> = ({ record, size = 288 }) => {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      track("download_seal", {});
     } catch (err) {
       console.error("Seal download failed", err);
       setDownloadError("Failed to create the seal image. Please try again.");
