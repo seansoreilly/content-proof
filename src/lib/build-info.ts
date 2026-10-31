@@ -27,31 +27,3 @@ export function getBuildInfo(): BuildInfo {
     isDevelopment: environment === "development",
   };
 }
-
-/**
- * Format build time for display
- */
-export function formatBuildTime(buildTime: string): string {
-  if (buildTime === "unknown") return "Unknown";
-
-  try {
-    const date = new Date(buildTime);
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return buildTime;
-  }
-}
-
-/**
- * Get short display version (commit hash only)
- */
-export function getShortVersion(): string {
-  const { commitHash } = getBuildInfo();
-  return commitHash === "unknown" ? "dev" : commitHash;
-}

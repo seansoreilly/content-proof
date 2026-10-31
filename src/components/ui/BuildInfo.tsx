@@ -1,43 +1,4 @@
-import { getBuildInfo, formatBuildTime } from "@/lib/build-info";
-
-interface BuildInfoProps {
-  variant?: "minimal" | "detailed";
-  className?: string;
-}
-
-export function BuildInfo({
-  variant = "minimal",
-  className = "",
-}: BuildInfoProps) {
-  const buildInfo = getBuildInfo();
-
-  if (variant === "minimal") {
-    return (
-      <div className={`text-xs text-mute ${className}`}>
-        <span className="font-mono">v{buildInfo.commitHash}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`text-xs text-mute space-y-1 ${className}`}>
-      <div className="font-mono">
-        <span className="font-semibold">Build:</span>{" "}
-        <span className="text-ink">{buildInfo.commitHash}</span>
-      </div>
-      <div>
-        <span className="font-semibold">Built:</span>{" "}
-        <span className="text-ink">
-          {formatBuildTime(buildInfo.buildTime)}
-        </span>
-      </div>
-      <div>
-        <span className="font-semibold">Env:</span>{" "}
-        <span className="text-ink">{buildInfo.environment}</span>
-      </div>
-    </div>
-  );
-}
+import { getBuildInfo } from "@/lib/build-info";
 
 export function DevelopmentBuildInfo() {
   const buildInfo = getBuildInfo();

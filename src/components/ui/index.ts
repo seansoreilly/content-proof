@@ -19,4 +19,4 @@ export {
   type SealMarkColors,
   type SealTone,
 } from "./SealMark";
-export { BuildInfo, DevelopmentBuildInfo } from "./BuildInfo";
+export { DevelopmentBuildInfo } from "./BuildInfo";
