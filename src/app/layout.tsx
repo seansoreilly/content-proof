@@ -86,6 +86,24 @@ export default function RootLayout({
           <p className="font-mono text-mute">
             Keys at /.well-known/public-keys.json
           </p>
+          <p className="mt-2">
+            Built by{" "}
+            <a
+              href="https://stepthrough.au/"
+              target="_blank"
+              rel="noopener"
+              className="underline hover:text-ink"
+            >
+              Stepthrough
+            </a>{" "}
+            &middot;{" "}
+            <a
+              href="mailto:contact@stepthrough.au"
+              className="underline hover:text-ink"
+            >
+              contact@stepthrough.au
+            </a>
+          </p>
         </footer>
       </body>
     </html>
