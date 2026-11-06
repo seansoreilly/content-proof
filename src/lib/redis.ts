@@ -1,7 +1,9 @@
 import { Redis } from "@upstash/redis";
 import { createMemoryLogStore, createRedisLogStore, type LogStore } from "@/lib/log-store";
 import { createMemoryStore, type CounterStore } from "@/lib/rate-limit";
-import { parseRecordObject, type SignatureRecord } from "@/lib/record";
+import { createMemoryRecordStore, createRedisRecordStore, type RecordStore } from "@/lib/record-store";
+
+export type { RecordStore } from "@/lib/record-store";
 
 /**
  * Optional Upstash Redis backing for rate limiting and record storage. The
@@ -28,7 +30,7 @@ export function getRedis(): Redis | null {
  */
 interface MemoryStores {
   counters: CounterStore;
-  records: Map<string, SignatureRecord>;
+  records: RecordStore;
   log: LogStore;
 }
 const memoryKey = "__contentproofMemoryStores" as const;
@@ -37,60 +39,33 @@ const memory: MemoryStores =
   globalStores[memoryKey] ??
   (globalStores[memoryKey] = {
     counters: createMemoryStore(),
-    records: new Map<string, SignatureRecord>(),
+    records: createMemoryRecordStore(),
     log: createMemoryLogStore(),
   });
-const memoryCounters = memory.counters;
+
+let redisRecords: RecordStore | null = null;
+let redisLog: LogStore | null = null;
 
 export function getCounterStore(): CounterStore {
   const redis = getRedis();
-  if (!redis) return memoryCounters;
+  if (!redis) return memory.counters;
   return {
     incr: (key) => redis.incr(key),
     expire: (key, seconds) => redis.expire(key, seconds),
   };
 }
 
-export interface RecordStore {
-  put(record: SignatureRecord): Promise<void>;
-  get(signature: string): Promise<SignatureRecord | null>;
+export function getRecordStore(): RecordStore {
+  const redis = getRedis();
+  if (!redis) return memory.records;
+  if (!redisRecords) redisRecords = createRedisRecordStore(redis);
+  return redisRecords;
 }
-
-const RECORD_TTL_SECONDS = 365 * 24 * 60 * 60;
-const memoryRecords = memory.records;
-const memoryLog = memory.log;
-let redisLog: LogStore | null = null;
 
 /** The append-only transparency log. Entries never expire. */
 export function getLogStore(): LogStore {
   const redis = getRedis();
-  if (!redis) return memoryLog;
+  if (!redis) return memory.log;
   if (!redisLog) redisLog = createRedisLogStore(redis);
   return redisLog;
-}
-
-export function getRecordStore(): RecordStore {
-  const redis = getRedis();
-  if (!redis) {
-    return {
-      async put(record) {
-        memoryRecords.set(record.s, record);
-      },
-      async get(signature) {
-        return memoryRecords.get(signature) ?? null;
-      },
-    };
-  }
-  return {
-    async put(record) {
-      await redis.set(`sig:${record.s}`, JSON.stringify(record), { ex: RECORD_TTL_SECONDS });
-    },
-    async get(signature) {
-      const raw = await redis.get<unknown>(`sig:${signature}`);
-      if (raw === null || raw === undefined) return null;
-      // Upstash auto-deserialises JSON; tolerate either shape.
-      const parsed = typeof raw === "string" ? (JSON.parse(raw) as unknown) : raw;
-      return parseRecordObject(parsed);
-    },
-  };
 }

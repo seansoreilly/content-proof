@@ -1,5 +1,6 @@
 import type { Redis } from "@upstash/redis";
-import { parseRecordObject, type SignatureRecord } from "@/lib/record";
+import type { SignatureRecord } from "@/lib/record";
+import { parseStoredRecord } from "@/lib/record-store";
 
 /**
  * Append-only log of every record the service issues. Entries are never
@@ -43,10 +44,17 @@ export function createMemoryLogStore(): LogStore {
 const LIST_KEY = "log:records";
 const INDEX_PREFIX = "logidx:";
 
-function parse(raw: unknown): SignatureRecord | null {
+/**
+ * Unlike the record store, the log must not treat a corrupt entry as missing:
+ * dropping it from a range would shift every later index and the service
+ * would sign a tree head over the wrong leaves. Fail loudly instead, so the
+ * log endpoints answer 503 until the entry is repaired.
+ */
+function parseLogEntry(raw: unknown, index: number): SignatureRecord | null {
   if (raw === null || raw === undefined) return null;
-  const value = typeof raw === "string" ? (JSON.parse(raw) as unknown) : raw;
-  return parseRecordObject(value);
+  const record = parseStoredRecord(raw);
+  if (!record) throw new Error(`Corrupt transparency log entry at index ${index}`);
+  return record;
 }
 
 export function createRedisLogStore(redis: Redis): LogStore {
@@ -62,13 +70,13 @@ export function createRedisLogStore(redis: Redis): LogStore {
     },
     async get(index) {
       if (index < 0) return null;
-      return parse(await redis.lindex(LIST_KEY, index));
+      return parseLogEntry(await redis.lindex(LIST_KEY, index), index);
     },
     async range(from, count) {
       if (count <= 0) return [];
       const start = Math.max(0, from);
       const raw = await redis.lrange<unknown>(LIST_KEY, start, start + count - 1);
-      return raw.map(parse).filter((r): r is SignatureRecord => r !== null);
+      return raw.map((entry, i) => parseLogEntry(entry, start + i)).filter((r): r is SignatureRecord => r !== null);
     },
     async indexOf(signature) {
       const raw = await redis.get<number | string>(`${INDEX_PREFIX}${signature}`);
