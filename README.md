@@ -205,8 +205,10 @@ Optional:
   back to in-memory.
 - `ALLOWED_EMAIL_DOMAINS`: comma-separated; unset allows all.
 - `DEBUG_AUTH=true` with `DEBUG_AUTH_EMAIL`: development-only sign-in bypass,
-  ignored in production. Set `NEXT_PUBLIC_DEBUG_AUTH=true` so the sign-in button
-  uses it.
+  ignored in production. Set `NEXT_PUBLIC_DEBUG_AUTH=true` alongside it: the
+  server-side `DEBUG_AUTH` registers the debug provider, and the public flag
+  only tells the sign-in button to call it. The public flag alone grants
+  nothing; the button falls back to Google.
 - `NEXT_PUBLIC_VERIFY_BASE_URL`: base URL used in QR codes.
 - `NEXT_PUBLIC_GA_MEASUREMENT_ID`: Google Analytics.
 

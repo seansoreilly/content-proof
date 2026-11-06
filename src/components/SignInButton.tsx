@@ -1,27 +1,57 @@
 "use client";
 
 import type { ReactElement } from "react";
-import { signIn } from "next-auth/react";
+import { getProviders, signIn } from "next-auth/react";
 import { Button } from "@/components/ui";
+
+/**
+ * Tries the development-only debug provider and reports whether it signed the
+ * visitor in. It checks the provider list first because next-auth's signIn
+ * navigates to its own sign-in page, rather than resolving with an error, when
+ * the provider is not registered; that happens whenever NEXT_PUBLIC_DEBUG_AUTH
+ * is set without the server-side DEBUG_AUTH.
+ */
+async function trySignInWithDebug(): Promise<boolean> {
+  try {
+    const providers = await getProviders();
+    if (!providers || !("debug" in providers)) return false;
+    const result = await signIn("debug", { redirect: false });
+    return result !== undefined && result.ok && !result.error;
+  } catch {
+    return false;
+  }
+}
+
+function signInWithGoogle(callbackUrl: string | undefined): void {
+  void signIn("google", callbackUrl ? { callbackUrl } : undefined);
+}
 
 export function SignInButton({ callbackUrl }: { callbackUrl?: string }): ReactElement {
   return (
     <Button
       onClick={() => {
-        // UI hint only. The server registers the debug provider solely when
-        // DEBUG_AUTH=true outside production; this flag just picks which
-        // provider the button calls.
+        // NEXT_PUBLIC_DEBUG_AUTH only picks which provider the button calls.
+        // The server registers the debug provider solely when DEBUG_AUTH=true
+        // outside production, so both must be set together; if only this one
+        // is set the debug attempt fails and we fall back to Google.
         // Both checks are inlined at build time, so a production bundle never
         // calls the debug provider even if the flag leaks into its environment.
         if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_AUTH === "true") {
-          void signIn("debug", { redirect: false }).then(() => {
+          void trySignInWithDebug().then((signedIn) => {
+            if (!signedIn) {
+              console.warn(
+                "Debug sign-in failed: either DEBUG_AUTH=true is not set on the server, or the sign-in callback rejected DEBUG_AUTH_EMAIL (check ALLOWED_EMAIL_DOMAINS). Falling back to Google.",
+              );
+              signInWithGoogle(callbackUrl);
+              return;
+            }
             if (callbackUrl) window.location.assign(callbackUrl);
             else window.location.reload();
           });
           return;
         }
 
-        void signIn("google", callbackUrl ? { callbackUrl } : undefined);
+        signInWithGoogle(callbackUrl);
       }}
     >
       {/* Google Icon */}
