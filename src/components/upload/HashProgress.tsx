@@ -12,7 +12,8 @@ export interface HashProgressProps {
   onCancel: () => void;
 }
 
-function percent(done: number, total: number): number {
+/** Whole percent of `total` done, clamped to 0–100. */
+export function percent(done: number, total: number): number {
   return total > 0 ? Math.min(100, Math.floor((done / total) * 100)) : 0;
 }
 

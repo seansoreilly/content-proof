@@ -1,37 +1,14 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import Image from "next/image";
-import { QrCodeGenerator } from "@/components/QrCodeGenerator";
-import { isAbortError, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_LABEL, sha256Hash } from "@/lib/hash";
-import { buildSignedMessage, type SignatureRecord } from "@/lib/record";
-import { getOrCreateUserKey, type UserSigningKey } from "@/lib/user-keys";
-import { track, type SignFailureType } from "@/lib/analytics";
+import React, { useEffect, useState } from "react";
 import { Eyebrow } from "@/components/ui";
 import { SignInButton } from "@/components/SignInButton";
-import { DropSeal } from "@/components/DropSeal";
+import { BatchList } from "@/components/upload/BatchList";
+import { DropZone } from "@/components/upload/DropZone";
 import { HashProgress } from "@/components/upload/HashProgress";
-import { interpretSignResponse } from "@/components/upload/sign-response";
-
-interface HashResult {
-  fileName: string;
-  fileSize: number;
-  hash: string;
-}
-
-function formatSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  return `${(bytes / 1024).toFixed(2)} KB`;
-}
-
-class SignError extends Error {
-  constructor(
-    message: string,
-    readonly errorType: SignFailureType,
-  ) {
-    super(message);
-  }
-}
+import { SignedResult } from "@/components/upload/SignedResult";
+import { currentEntry, selectedEntry } from "@/components/upload/upload-reducer";
+import { useBatchSigner } from "@/components/upload/useBatchSigner";
 
 interface FileUploadProps {
   /**
@@ -44,245 +21,53 @@ interface FileUploadProps {
 }
 
 export default function FileUpload({ email }: FileUploadProps): React.JSX.Element {
-  const [dragActive, setDragActive] = useState(false);
-  const [hashResult, setHashResult] = useState<HashResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [needsSignIn, setNeedsSignIn] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const [stage, setStage] = useState<"idle" | "hashing" | "signing">("idle");
-  const [progress, setProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [record, setRecord] = useState<SignatureRecord | null>(null);
-  const [userKey, setUserKey] = useState<UserSigningKey | null | "unsupported">(null);
+  const { state, files, userKey, signFiles, cancel, select } = useBatchSigner(email);
+  const { entries, running, note, stopError, needsSignIn } = state;
 
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  // The run in flight, so Cancel (and unmounting) can stop reading the file and
-  // drop the signing request.
-  const inFlight = useRef<AbortController | null>(null);
-  useEffect(() => () => inFlight.current?.abort(), []);
+  const current = currentEntry(state);
+  const selected = selectedEntry(state);
+  const isBatch = entries.length > 1;
 
-  // This browser's own signing key (created on first use, never leaves the device).
-  // The promise is kept so a file dropped before the key resolves still waits
-  // for it instead of silently producing a service-only record.
-  const keyPromise = useRef<Promise<UserSigningKey | "unsupported"> | null>(null);
+  // Preview the selected file when it is an image. The object URL lives only as
+  // long as that selection, so switching entries or batches never leaks one.
+  const previewFile = selected?.isImage ? (files[selected.id] ?? null) : null;
+  // The URL is kept with the file it was made for, so on the render where the
+  // selection changes the old (soon revoked) URL is never shown for the new file.
+  const [preview, setPreview] = useState<{ file: File; url: string } | null>(null);
   useEffect(() => {
-    let cancelled = false;
-    const promise = getOrCreateUserKey().catch((): "unsupported" => "unsupported");
-    keyPromise.current = promise;
-    void promise.then((key) => {
-      if (!cancelled) setUserKey(key);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const resetState = () => {
-    setHashResult(null);
-    setError(null);
-    setNeedsSignIn(false);
-    setNote(null);
-    setPreviewUrl((old) => {
-      if (old) URL.revokeObjectURL(old);
-      return null;
-    });
-    setRecord(null);
-  };
-
-  const cancel = () => {
-    inFlight.current?.abort();
-    inFlight.current = null;
-    // Cancelling is the person's choice, not a failure: back to idle, no error.
-    resetState();
-    setStage("idle");
-  };
-
-  // Any file type is fine: only its hash leaves the browser. The size cap is a
-  // sanity bound, not a memory limit, because hashing is streamed.
-  const validateFile = (file: File): { message: string; errorType: SignFailureType } | null => {
-    if (file.size === 0) return { message: "The selected file is empty.", errorType: "empty_file" };
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      return {
-        message: `Files larger than ${MAX_FILE_SIZE_LABEL} are not supported.`,
-        errorType: "file_too_large",
-      };
-    }
-    return null;
-  };
-
-  const handleFiles = async (files: FileList | null, source: "drop" | "picker") => {
-    if (!files || files.length === 0) return;
-    inFlight.current?.abort();
-    const controller = new AbortController();
-    inFlight.current = controller;
-    const { signal } = controller;
-    resetState();
-
-    const file = files[0];
-    if (files.length > 1) setNote(`Only the first file, ${file.name}, was used.`);
-    const isImage = file.type.startsWith("image/");
-    track("file_selected", { source, is_image: isImage });
-    const validationError = validateFile(file);
-    if (validationError) {
-      setError(validationError.message);
-      track("sign_file_failed", { error_type: validationError.errorType });
+    if (!previewFile) {
+      setPreview(null);
       return;
     }
+    const url = URL.createObjectURL(previewFile);
+    setPreview({ file: previewFile, url });
+    return () => URL.revokeObjectURL(url);
+  }, [previewFile]);
+  const previewUrl = preview && preview.file === previewFile ? preview.url : null;
 
-    if (isImage) {
-      setPreviewUrl(URL.createObjectURL(file));
-    }
+  // A batch lists each file's outcome in its row; a single file shows its
+  // failure here, as the page always has. A stopped batch says why here too.
+  const singleFailure = !isBatch && entries[0]?.status.kind === "failed" ? entries[0].status.message : null;
+  const error = stopError ?? singleFailure;
 
-    try {
-      setProgress({ done: 0, total: file.size });
-      setStage("hashing");
-      const hash = await sha256Hash(file, {
-        signal,
-        onProgress: (done, total) => {
-          if (!signal.aborted) setProgress({ done, total });
-        },
-      });
-      if (signal.aborted) return;
-      setHashResult({ fileName: file.name, fileSize: file.size, hash });
-
-      setStage("signing");
-      // Sign with this browser's key first so the service can countersign a
-      // statement the account holder actually made. Falls back to a
-      // service-only record when the browser cannot hold a key.
-      let payload: Record<string, unknown> = { fileHash: hash };
-      const key = userKey ?? (await keyPromise.current) ?? "unsupported";
-      if (key !== "unsupported") {
-        const timestamp = Date.now();
-        const userSignature = await key.sign(buildSignedMessage(hash, email, timestamp));
-        payload = { fileHash: hash, timestamp, userPublicKey: key.publicKey, userSignature };
-      }
-      const res = await fetch("/api/sign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal,
-      });
-      // A non-JSON error page still has a status worth reporting.
-      const body: unknown = await res.json().catch(() => null);
-      if (signal.aborted) return;
-
-      const outcome = interpretSignResponse(res.status, body);
-      if (!outcome.ok) {
-        if (outcome.needsSignIn) setNeedsSignIn(true);
-        throw new SignError(outcome.message, outcome.errorType);
-      }
-      setRecord(outcome.record);
-      track("sign_file", { key_type: key === "unsupported" ? "service_only" : "user_key", is_image: isImage });
-    } catch (err) {
-      // Cancel already returned to idle; an abort is not a failure to report.
-      if (isAbortError(err) || signal.aborted) return;
-      console.error("File signing failed:", err);
-      track("sign_file_failed", { error_type: err instanceof SignError ? err.errorType : "unknown" });
-      setError(err instanceof Error ? err.message : "Failed to generate signature.");
-    } finally {
-      if (inFlight.current === controller) {
-        inFlight.current = null;
-        setStage("idle");
-      }
-    }
-  };
-
-  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Moving onto a child of the zone fires dragleave too; only a real exit counts.
-    if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
-    setDragActive(false);
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    void handleFiles(e.dataTransfer.files, "drop");
-  };
-
-  const onButtonClick = () => {
-    inputRef.current?.click();
-  };
-
-  const onFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    // handleFiles reads the file before its first await, so the input can be
-    // cleared right away; that lets choosing the same file again fire change.
-    void handleFiles(e.target.files, "picker");
-    e.target.value = "";
-  };
-
-  const busy = stage !== "idle";
-  const stageLabel = stage === "hashing" ? "Hashing" : "Signing";
+  const stage = running ? (current?.status.kind === "hashing" ? "hashing" : "signing") : null;
+  const hashing = current?.status.kind === "hashing" ? current.status : null;
 
   return (
     <div className="w-full space-y-6">
-      <div
-        role="button"
-        tabIndex={0}
-        aria-label="Choose a file to sign"
-        aria-disabled={busy}
-        className={`group flex flex-col items-center gap-5 px-5 py-7 text-center shadow-pressed transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:flex-row sm:gap-8 sm:px-8 sm:py-9 sm:text-left ${
-          dragActive ? "bg-tint" : "bg-paper"
-        } ${busy ? "cursor-progress" : "cursor-pointer"}`}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-        onClick={busy ? undefined : onButtonClick}
-        onKeyDown={(e) => {
-          if (busy) return;
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onButtonClick();
-          }
-        }}
-      >
-        <input id="fileInput" type="file" ref={inputRef} className="hidden" onChange={onFileChange} />
+      <DropZone
+        stage={stage}
+        position={isBatch && current ? `File ${current.id + 1} of ${entries.length}` : undefined}
+        onFiles={(list, source) => void signFiles(list, source)}
+      />
 
-        <DropSeal
-          state={busy ? "busy" : dragActive ? "over" : "idle"}
-          rimText={`${busy ? stageLabel : "Unsealed · awaiting a file"} · `.repeat(busy ? 4 : 2)}
+      {running && (
+        <HashProgress
+          done={hashing ? hashing.done : null}
+          total={hashing ? hashing.total : 0}
+          label={isBatch && current ? current.name : undefined}
+          onCancel={cancel}
         />
-
-        <div className="min-w-0 space-y-2">
-          <p className="font-display text-[22px] font-bold uppercase leading-none tracking-[-0.01em] sm:text-[26px]">
-            {busy ? `${stageLabel}…` : dragActive ? "Release to sign" : "Drop a file to sign it"}
-          </p>
-          {busy ? (
-            <p className="text-mute" role={stage === "signing" ? "status" : undefined}>
-              {stage === "hashing"
-                ? "Reading the file in this browser."
-                : "Sending the fingerprint for countersignature."}
-            </p>
-          ) : (
-            <p className="text-mute">
-              or{" "}
-              <span className="text-accent underline decoration-1 underline-offset-[3px] group-hover:decoration-2">
-                choose one from your device
-              </span>
-            </p>
-          )}
-          <p className="font-mono text-[12px] uppercase tracking-[0.08em] text-mute">
-            Any type · up to {MAX_FILE_SIZE_LABEL}
-          </p>
-        </div>
-      </div>
-
-      {busy && (
-        <HashProgress done={stage === "hashing" ? progress.done : null} total={progress.total} onCancel={cancel} />
       )}
 
       {note && <p className="text-sm text-mute">{note}</p>}
@@ -296,40 +81,9 @@ export default function FileUpload({ email }: FileUploadProps): React.JSX.Elemen
         </div>
       )}
 
-      {previewUrl && (
-        <details>
-          <summary className="eyebrow cursor-pointer select-none">Preview</summary>
-          <div className="mt-3 p-3 shadow-pressed">
-            <Image
-              src={previewUrl}
-              alt="File preview"
-              width={256}
-              height={256}
-              unoptimized
-              className="max-h-64 w-full object-contain"
-            />
-          </div>
-        </details>
-      )}
+      {isBatch && <BatchList entries={entries} selectedId={state.selectedId} onSelect={select} />}
 
-      {hashResult && (
-        <dl className="grid gap-4">
-          <div>
-            <dt className="eyebrow">File</dt>
-            <dd className="mt-1 break-all">{hashResult.fileName}</dd>
-          </div>
-          <div>
-            <dt className="eyebrow">Size</dt>
-            <dd className="mt-1">{formatSize(hashResult.fileSize)}</dd>
-          </div>
-          <div>
-            <dt className="eyebrow">SHA-256</dt>
-            <dd className="mt-1 break-all font-mono text-[13px]">{hashResult.hash}</dd>
-          </div>
-        </dl>
-      )}
-
-      {record && <QrCodeGenerator record={record} />}
+      {selected && <SignedResult key={`${state.run}-${selected.id}`} entry={selected} previewUrl={previewUrl} />}
 
       <div className="space-y-2 pt-2" data-testid="user-key">
         {userKey === "unsupported" ? (
