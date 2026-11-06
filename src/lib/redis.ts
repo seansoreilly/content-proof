@@ -1,6 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { createMemoryLogStore, createRedisLogStore, type LogStore } from "@/lib/log-store";
-import { createMemoryStore, type CounterStore } from "@/lib/rate-limit";
+import { createMemoryStore, createRedisCounterStore, type CounterStore } from "@/lib/rate-limit";
 import { createMemoryRecordStore, createRedisRecordStore, type RecordStore } from "@/lib/record-store";
 
 export type { RecordStore } from "@/lib/record-store";
@@ -43,16 +43,15 @@ const memory: MemoryStores =
     log: createMemoryLogStore(),
   });
 
+let redisCounters: CounterStore | null = null;
 let redisRecords: RecordStore | null = null;
 let redisLog: LogStore | null = null;
 
 export function getCounterStore(): CounterStore {
   const redis = getRedis();
   if (!redis) return memory.counters;
-  return {
-    incr: (key) => redis.incr(key),
-    expire: (key, seconds) => redis.expire(key, seconds),
-  };
+  if (!redisCounters) redisCounters = createRedisCounterStore(redis);
+  return redisCounters;
 }
 
 export function getRecordStore(): RecordStore {

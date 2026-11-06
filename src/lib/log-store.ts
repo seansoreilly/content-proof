@@ -57,13 +57,27 @@ function parseLogEntry(raw: unknown, index: number): SignatureRecord | null {
   return record;
 }
 
+/**
+ * RPUSH the entry and SET its signature index in one Lua script, so Redis
+ * runs both or neither. As two calls, a failure between them left an entry in
+ * the log that `indexOf` (and so proofs by signature) could never find. The
+ * index is the new length minus one, which only the RPUSH result knows.
+ */
+export const APPEND_SCRIPT = `
+local length = redis.call('RPUSH', KEYS[1], ARGV[1])
+redis.call('SET', KEYS[2], tostring(length - 1))
+return length
+`;
+
 export function createRedisLogStore(redis: Redis): LogStore {
   return {
     async append(record) {
-      const length = await redis.rpush(LIST_KEY, JSON.stringify(record));
-      const index = length - 1;
-      await redis.set(`${INDEX_PREFIX}${record.s}`, index);
-      return index;
+      const length = await redis.eval<[string], number | string>(
+        APPEND_SCRIPT,
+        [LIST_KEY, `${INDEX_PREFIX}${record.s}`],
+        [JSON.stringify(record)]
+      );
+      return Number(length) - 1;
     },
     async size() {
       return redis.llen(LIST_KEY);
