@@ -54,8 +54,43 @@ export function getCounterStore(): CounterStore {
   return redisCounters;
 }
 
+export interface StorageStatus {
+  /** Whether records and the transparency log survive a restart. */
+  durable: boolean;
+  backend: "redis" | "memory";
+}
+
+let warnedEphemeral = false;
+
+/**
+ * In production the memory fallback means every restart or new instance
+ * silently loses the record store and the transparency log, and the tree
+ * heads archived so far stop matching. That is a misconfiguration, but one
+ * the service can still limp along with, so it is reported loudly once per
+ * process rather than refused. Called from the record and log accessors, not
+ * the counter store, which route modules touch at import time during
+ * `next build`.
+ */
+function warnIfEphemeral(redis: Redis | null): void {
+  if (redis || warnedEphemeral || process.env.NODE_ENV !== "production") return;
+  warnedEphemeral = true;
+  console.error(
+    "[storage] Redis is not configured (UPSTASH_REDIS_REST_URL/TOKEN or KV_REST_API_URL/TOKEN). " +
+      "Using the in-memory fallback: issued records and the transparency log WILL NOT PERSIST " +
+      "across restarts or instances."
+  );
+}
+
+/** Which backend the stores use, for /api/health. */
+export function storageStatus(): StorageStatus {
+  const redis = getRedis();
+  warnIfEphemeral(redis);
+  return redis ? { durable: true, backend: "redis" } : { durable: false, backend: "memory" };
+}
+
 export function getRecordStore(): RecordStore {
   const redis = getRedis();
+  warnIfEphemeral(redis);
   if (!redis) return memory.records;
   if (!redisRecords) redisRecords = createRedisRecordStore(redis);
   return redisRecords;
@@ -64,6 +99,7 @@ export function getRecordStore(): RecordStore {
 /** The append-only transparency log. Entries never expire. */
 export function getLogStore(): LogStore {
   const redis = getRedis();
+  warnIfEphemeral(redis);
   if (!redis) return memory.log;
   if (!redisLog) redisLog = createRedisLogStore(redis);
   return redisLog;

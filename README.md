@@ -112,6 +112,14 @@ Optional endpoints:
 - `POST /api/verify` with JSON `{v,k,h,e,t,s}` (plus `u`,`us` for version 3)
   returns `{valid, keyId, userSigned, userKey, reason}` for server-side
   verification. `v` and `t` must be JSON numbers. Rate limited, CORS enabled.
+- `GET /api/health` returns
+  `{ok, storage: {durable, backend}, log: {size}, keyId}`. `backend` is
+  `"redis"` or `"memory"`; `durable: false` means records and the
+  transparency log are lost on restart (no Upstash/KV variables set, which
+  production also reports once with a loud `console.error`). `keyId` is the
+  current signing key, or `null` if keys are not configured. If the log size
+  cannot be read, `log` is `{size: null, error: "unavailable"}`. Always 200,
+  `Cache-Control: no-store`, rate limited, CORS enabled.
 
 Unknown `/api/*` paths return a JSON 404. Every response carries a
 Content-Security-Policy and the usual security headers (`next.config.ts`),
