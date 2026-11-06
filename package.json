@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "NODE_OPTIONS='--inspect' next dev --turbopack --hostname 0.0.0.0",
+    "dev": "next dev --turbopack",
+    "dev:debug": "NODE_OPTIONS='--inspect' next dev --turbopack --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "deploy": "npx --yes vercel --prod",
+    "deploy": "npx --yes vercel@65.12.1 --prod",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

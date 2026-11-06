@@ -212,7 +212,13 @@ Optional:
 
 ## Scripts
 
-- `npm run dev`: development server
+- `npm run dev`: development server on localhost
+- `npm run dev:debug`: development server with the Node inspector enabled
+  (on 127.0.0.1:9229) and the app listening on all interfaces (`0.0.0.0`) so
+  other devices, such as a phone scanning QR codes, can reach it. Anyone on
+  the network can then use the `DEBUG_AUTH` sign-in bypass if it is enabled,
+  so only use it on a network you trust.
+- `npm run deploy`: production deploy with a pinned Vercel CLI
 - `npm run build`: production build
 - `npm start`: run the production build
 - `npm run lint`: ESLint
@@ -227,8 +233,9 @@ platform packages from the lockfile and `npm ci` on npm 10 then refuses it.
 
 ## Deployment
 
-Deploy on [Vercel](https://vercel.com/) with `npm run deploy` (runs the Vercel
-CLI via `npx`; the CLI is not a project dependency), or build locally with
+Deploy on [Vercel](https://vercel.com/) with `npm run deploy` (runs a pinned
+version of the Vercel CLI via `npx`; the CLI is not a project dependency, so
+bump the version in `package.json` deliberately), or build locally with
 `npm run build` and `npm start`. Set the required environment variables in
 the host. Keep `ED25519_PRIVATE_KEY` secret; the public key is published at
 `/.well-known/public-keys.json`. To rotate, set a new keypair and move the old
