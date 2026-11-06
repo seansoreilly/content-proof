@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
-import { corsHeaders, corsPreflight } from "@/lib/http";
+import { corsHeaders } from "@/lib/http";
 import { buildPublicKeysJson } from "@/lib/keys";
+import { publicOptions, publicRoute } from "@/lib/public-route";
 
 /**
  * GET /.well-known/public-keys.json
@@ -11,25 +11,22 @@ import { buildPublicKeysJson } from "@/lib/keys";
  */
 export const dynamic = "force-dynamic";
 
-export function OPTIONS(): Response {
-  return corsPreflight(["GET"]);
-}
+export const OPTIONS = publicOptions(["GET"]);
 
-export async function GET(): Promise<Response> {
-  try {
-    const body = buildPublicKeysJson();
-    return new NextResponse(JSON.stringify(body), {
+export const GET = publicRoute(
+  {
+    failureStatus: 503,
+    failureMessage: "Signing keys are not configured",
+    logTag: "[well-known] keys unavailable",
+  },
+  async (): Promise<Response> => {
+    // Built by hand rather than with jsonResponse to keep the explicit charset.
+    return new Response(JSON.stringify(buildPublicKeysJson()), {
       status: 200,
       headers: corsHeaders({
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "public, max-age=0, must-revalidate",
       }),
     });
-  } catch (error) {
-    console.error("[well-known] keys unavailable", error);
-    return NextResponse.json(
-      { error: "Signing keys are not configured" },
-      { status: 503, headers: corsHeaders() }
-    );
   }
-}
+);
