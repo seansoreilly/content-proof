@@ -15,6 +15,13 @@ export interface UserKeyStatus {
 export const USER_KEY_STATUS_PATH = "/api/keys/user/";
 
 /**
+ * The exact `error` text of `/api/sign`'s 403 for a revoked key. Shared so the
+ * upload page can recognise that answer, replace this browser's key and retry,
+ * rather than matching on a copy of the string that could drift.
+ */
+export const USER_KEY_REVOKED_MESSAGE = "This signing key has been revoked";
+
+/**
  * Fetch a key's status. Resolves to null when the status cannot be had (bad
  * key, network failure, error status, unexpected body), so callers can treat
  * "unknown" separately from "known and not revoked" and never block

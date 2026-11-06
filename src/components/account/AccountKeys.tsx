@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 import { Button, LocalTime } from "@/components/ui";
-import { getOrCreateUserKey } from "@/lib/user-keys";
+import { getOrCreateUserKey, replaceRevokedUserKey } from "@/lib/user-keys";
 
 interface KeyEntry {
   publicKey: string;
@@ -26,6 +26,7 @@ export function AccountKeys(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [rotated, setRotated] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -49,8 +50,11 @@ export function AccountKeys(): ReactElement {
   }, [load]);
 
   const revoke = async (publicKey: string): Promise<void> => {
+    // Captured now: the marker may move while the request is in flight.
+    const wasThisBrowser = publicKey === thisBrowserKey;
     setRevoking(publicKey);
     setError(null);
+    setRotated(false);
     try {
       const res = await fetch("/api/account/keys/revoke", {
         method: "POST",
@@ -62,6 +66,20 @@ export function AccountKeys(): ReactElement {
         throw new Error(typeof body?.error === "string" ? body.error : `Revocation failed (${res.status}).`);
       }
       await load();
+      // The service will never countersign with a revoked key again, so if it
+      // was this browser's, replace it rather than leave the browser unable to
+      // sign. Asking the store, not the marker, also covers a revoke confirmed
+      // before the marker had loaded.
+      try {
+        const { key, rotated: replaced } = await replaceRevokedUserKey(publicKey);
+        setThisBrowserKey(key.publicKey);
+        setRotated(replaced || wasThisBrowser);
+      } catch {
+        setThisBrowserKey(null);
+        if (wasThisBrowser) {
+          setError("The key is revoked, but this browser could not make a new one, so it cannot sign with its own key.");
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Revocation failed.");
     } finally {
@@ -75,6 +93,16 @@ export function AccountKeys(): ReactElement {
       {error && (
         <p className="text-void" role="alert">
           {error}
+        </p>
+      )}
+      {rotated && (
+        <p className="text-sm text-mute" role="status" data-testid="new-key-note">
+          This browser now has a new signing key; it is registered the next time you sign.
+          {thisBrowserKey && (
+            <code className="mt-1 block break-all font-mono text-[13px]" data-testid="new-browser-key">
+              {thisBrowserKey}
+            </code>
+          )}
         </p>
       )}
       {keys === null && !error && (
@@ -115,7 +143,7 @@ export function AccountKeys(): ReactElement {
                     <div className="flex flex-col gap-3">
                       <p className="text-sm">
                         Revoke this key permanently? ContentProof will refuse to countersign with it again
-                        {isThisBrowser ? ", so this browser will no longer be able to sign" : ""}. Records it
+                        {isThisBrowser ? ", so this browser will get a new key for future records" : ""}. Records it
                         already signed are not withdrawn.
                       </p>
                       <div className="flex flex-wrap gap-3">

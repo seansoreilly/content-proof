@@ -1,5 +1,6 @@
 import type { SignFailureType } from "@/lib/analytics";
 import { parseRecordObject, type SignatureRecord } from "@/lib/record";
+import { USER_KEY_REVOKED_MESSAGE } from "@/lib/user-key-status";
 
 /** What the upload page should do with one answer from `/api/sign`. */
 export type SignResponseOutcome =
@@ -15,13 +16,20 @@ export type SignResponseOutcome =
        * so a batch should stop here rather than burn through its other files.
        */
       stopsBatch: boolean;
+      /**
+       * The account holder revoked the browser key this request was signed
+       * with. The caller can replace the key and try the file again.
+       */
+      revoked?: true;
     };
+
+type SignFailureOutcome = Extract<SignResponseOutcome, { ok: false }>;
 
 function failure(
   message: string,
   errorType: SignFailureType,
   { needsSignIn = false, stopsBatch = false } = {},
-): SignResponseOutcome {
+): SignFailureOutcome {
   return { ok: false, message, errorType, needsSignIn, stopsBatch };
 }
 
@@ -43,7 +51,9 @@ export function interpretSignResponse(status: number, body: unknown): SignRespon
   }
   if (status === 403) {
     // The server explains why this key is refused better than a generic line can.
-    return failure(serverMessage(body) ?? "This signing key cannot be used.", "unauthorized");
+    const message = serverMessage(body);
+    const outcome = failure(message ?? "This signing key cannot be used.", "unauthorized");
+    return message === USER_KEY_REVOKED_MESSAGE ? { ...outcome, revoked: true } : outcome;
   }
   if (status === 429) {
     return failure("Too many signing requests. Please wait a minute and try again.", "rate_limited", {

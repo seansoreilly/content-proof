@@ -7,6 +7,7 @@ import { createRateLimiter, rateLimitedResponse } from "@/lib/rate-limit";
 import { getCounterStore, getLogStore, getRecordStore, getUserKeyRegistry } from "@/lib/redis";
 import { parseSignRequest } from "@/lib/sign-request";
 import { isCorruptKeyEntryError } from "@/lib/user-key-registry";
+import { USER_KEY_REVOKED_MESSAGE } from "@/lib/user-key-status";
 
 // 30 signatures per account per minute is generous for a human and a hard
 // ceiling for anything scripted.
@@ -120,7 +121,7 @@ async function checkUserKey(email: string, publicKey: string): Promise<{ status:
     return null;
   }
   if (!owner) return null;
-  if (owner.revokedAt !== undefined) return { status: 403, error: "This signing key has been revoked" };
+  if (owner.revokedAt !== undefined) return { status: 403, error: USER_KEY_REVOKED_MESSAGE };
   if (owner.email !== email.toLowerCase()) {
     return { status: 403, error: "This signing key is registered to another account" };
   }

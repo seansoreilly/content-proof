@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { interpretSignResponse } from "@/components/upload/sign-response";
+import { USER_KEY_REVOKED_MESSAGE } from "@/lib/user-key-status";
 
 const record = {
   v: 2,
@@ -46,6 +47,22 @@ describe("interpretSignResponse", () => {
     expect(interpretSignResponse(403, null)).toMatchObject({ message: "This signing key cannot be used." });
     expect(interpretSignResponse(403, { error: "  " })).toMatchObject({ message: "This signing key cannot be used." });
     expect(interpretSignResponse(403, { error: 42 })).toMatchObject({ message: "This signing key cannot be used." });
+  });
+
+  it("flags only the server's exact revoked-key 403, without stopping the batch", () => {
+    expect(interpretSignResponse(403, { error: USER_KEY_REVOKED_MESSAGE })).toEqual({
+      ok: false,
+      message: USER_KEY_REVOKED_MESSAGE,
+      errorType: "unauthorized",
+      needsSignIn: false,
+      stopsBatch: false,
+      revoked: true,
+    });
+    expect(interpretSignResponse(403, { error: "This signing key is registered to another account" })).not.toHaveProperty(
+      "revoked",
+    );
+    // Same words under another status are not the revocation answer.
+    expect(interpretSignResponse(500, { error: USER_KEY_REVOKED_MESSAGE })).not.toHaveProperty("revoked");
   });
 
   it("reports the rate limit on 429 and stops a batch", () => {

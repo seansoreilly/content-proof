@@ -4,9 +4,9 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { track, type SignFailureType } from "@/lib/analytics";
 import { isAbortError, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_LABEL, sha256Hash } from "@/lib/hash";
 import { buildSignedMessage } from "@/lib/record";
-import { getOrCreateUserKey, type UserSigningKey } from "@/lib/user-keys";
+import { getOrCreateUserKey, replaceRevokedUserKey, type UserSigningKey } from "@/lib/user-keys";
 import type { FileSource } from "./DropZone";
-import { interpretSignResponse } from "./sign-response";
+import { interpretSignResponse, type SignResponseOutcome } from "./sign-response";
 import {
   batchCapNote,
   initialUploadState,
@@ -130,25 +130,46 @@ export function useBatchSigner(email: string): BatchSigner {
             // statement the account holder actually made. Falls back to a
             // service-only record when the browser cannot hold a key. Each file
             // gets its own timestamp, taken just before its request.
-            let payload: Record<string, unknown> = { fileHash: hash };
-            const key = (await keyPromise.current) ?? "unsupported";
-            if (key !== "unsupported") {
-              const timestamp = Date.now();
-              const userSignature = await key.sign(buildSignedMessage(hash, email, timestamp));
-              payload = { fileHash: hash, timestamp, userPublicKey: key.publicKey, userSignature };
-            }
-            if (signal.aborted) return;
-            const res = await fetch("/api/sign", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload),
-              signal,
-            });
-            // A non-JSON error page still has a status worth reporting.
-            const body: unknown = await res.json().catch(() => null);
-            if (signal.aborted) return;
+            const attempt = async (key: UserSigningKey | "unsupported"): Promise<SignResponseOutcome | null> => {
+              let payload: Record<string, unknown> = { fileHash: hash };
+              if (key !== "unsupported") {
+                const timestamp = Date.now();
+                const userSignature = await key.sign(buildSignedMessage(hash, email, timestamp));
+                payload = { fileHash: hash, timestamp, userPublicKey: key.publicKey, userSignature };
+              }
+              if (signal.aborted) return null;
+              const res = await fetch("/api/sign", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+                signal,
+              });
+              // A non-JSON error page still has a status worth reporting.
+              const body: unknown = await res.json().catch(() => null);
+              if (signal.aborted) return null;
+              return interpretSignResponse(res.status, body);
+            };
 
-            const outcome = interpretSignResponse(res.status, body);
+            let key = (await keyPromise.current) ?? "unsupported";
+            let outcome = await attempt(key);
+            if (!outcome) return;
+            if (!outcome.ok && outcome.revoked && key !== "unsupported") {
+              // The account holder revoked this browser's key. Replace it once
+              // and try this file once more; later files then use the new key.
+              // If no key can be had, the revoked message is shown as before.
+              const fresh = await replaceRevokedUserKey(key.publicKey).then(
+                (replacement) => replacement.key,
+                () => null,
+              );
+              if (signal.aborted) return;
+              if (fresh) {
+                key = fresh;
+                keyPromise.current = Promise.resolve(fresh);
+                setUserKey(fresh);
+                outcome = await attempt(fresh);
+                if (!outcome) return;
+              }
+            }
             if (!outcome.ok) {
               track("sign_file_failed", { error_type: outcome.errorType });
               if (outcome.stopsBatch) {
