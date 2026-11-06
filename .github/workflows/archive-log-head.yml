@@ -5,6 +5,12 @@ name: Archive transparency log head
 # timestamped archive of the log's growth: any later head whose tree is not an
 # extension of an earlier one proves the log was rewritten.
 #
+# Before committing, scripts/verify-log-head.mjs checks the new head's
+# signature against the published keys and asks the service for an RFC 6962
+# consistency proof from the previously archived head. If either fails the job
+# fails and nothing is committed, so the red run itself is the alarm. The log
+# says whether a check failed or the service could not be reached at all.
+#
 # Set the repository variable CONTENTPROOF_BASE_URL (e.g. https://contentproof.app)
 # to enable it. Without it the job exits without doing anything.
 
@@ -21,7 +27,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch and store the signed tree head
+      # The verifier is plain Node with no dependencies, so no npm ci.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Fetch, verify and store the signed tree head
         env:
           BASE_URL: ${{ vars.CONTENTPROOF_BASE_URL }}
         run: |
@@ -31,10 +41,26 @@ jobs:
             exit 0
           fi
           mkdir -p log-heads
+          # The newest archived head, picked before the new one is written.
+          previous=$(ls log-heads/*.json 2>/dev/null | sort | tail -n 1 || true)
           stamp=$(date -u +%Y-%m-%dT%H-%M-%SZ)
-          curl -fsS "${BASE_URL%/}/api/log/head" -o "log-heads/${stamp}.json"
-          python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert isinstance(d["size"],int) and len(d["root"])==64 and d["signature"]' "log-heads/${stamp}.json"
-          cat "log-heads/${stamp}.json"
+          new="log-heads/${stamp}.json"
+          curl -fsS "${BASE_URL%/}/api/log/head" -o "$new"
+          cat "$new"
+          echo
+          status=0
+          node scripts/verify-log-head.mjs --base-url "$BASE_URL" "$new" ${previous:+"$previous"} || status=$?
+          if [ "$status" -ne 0 ]; then
+            # Nothing unverified is ever archived. Exit 3 means the service could
+            # not be reached for the checks: an outage, not evidence of tampering.
+            if [ "$status" -eq 3 ]; then
+              echo "::error::Log head verification incomplete: the service was unavailable. Nothing archived."
+            else
+              echo "::error::Log head verification FAILED. Nothing archived."
+            fi
+            rm -f "$new"
+            exit 1
+          fi
       - name: Commit
         run: |
           set -euo pipefail

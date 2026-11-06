@@ -224,8 +224,17 @@ checks the inclusion proof and the head signature after a successful
 verification. To make the guarantee bite, tree heads must be archived
 somewhere the service does not control: the workflow
 `.github/workflows/archive-log-head.yml` commits the head to this repository
-daily once the repository variable `CONTENTPROOF_BASE_URL` is set. Anyone can
-do the same.
+daily once the repository variable `CONTENTPROOF_BASE_URL` is set. Before
+committing, it runs `scripts/verify-log-head.mjs`, which checks the new head's
+signature against `/.well-known/public-keys.json` and fetches a consistency
+proof from the previously archived head; the job fails, and commits nothing,
+if either check fails or cannot be completed. Anyone can do the same with
+plain Node (18+, no dependencies); it exits 1 on a failed check and 3 when
+the service could not be reached:
+
+```bash
+node scripts/verify-log-head.mjs --base-url https://contentproof.app new-head.json [previous-head.json]
+```
 
 What it does not give you: proof that the account holder asked for the
 record. See `documentation/adr/0001-per-user-keys-and-sigstore.md` for the
