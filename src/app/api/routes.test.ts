@@ -17,10 +17,12 @@ vi.mock("next-auth", () => ({
 // Shared in-memory stores so the sign route and the lookup route see the same data.
 const records = new Map<string, SignatureRecord>();
 let log = createMemoryLogStore();
+let recordPutError: Error | null = null;
 vi.mock("@/lib/redis", () => ({
   getCounterStore: () => createMemoryStore(),
   getRecordStore: () => ({
     put: async (r: SignatureRecord) => {
+      if (recordPutError) throw recordPutError;
       records.set(r.s, r);
     },
     get: async (s: string) => records.get(s) ?? null,
@@ -46,6 +48,7 @@ describe("API routes", () => {
   beforeEach(() => {
     records.clear();
     log = createMemoryLogStore();
+    recordPutError = null;
     session.user = { email: "signer@gmail.com" };
     stubServerKeys();
   });
@@ -228,6 +231,31 @@ describe("API routes", () => {
     expect(body.record).toMatchObject({ v: 2, e: "signer@gmail.com", h: hashHexToB64url(fileHex) });
     expect(body.record.s).toHaveLength(86);
     expect(records.get(body.record.s)).toEqual(body.record);
+  });
+
+  it("reports a stored, logged record with logged: true", async () => {
+    const { sign } = await routes();
+    const res = await sign.POST(jsonRequest("http://t/api/sign", { fileHash: fileHex }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ logIndex: 0, logged: true });
+  });
+
+  it("still signs with 200 but reports logged: false when storage fails", async () => {
+    recordPutError = new Error("redis down");
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { sign, verify } = await routes();
+    const res = await sign.POST(jsonRequest("http://t/api/sign", { fileHash: fileHex }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { record: SignatureRecord; logIndex: number | null; logged: boolean };
+    expect(body.logged).toBe(false);
+    expect(body.logIndex).toBeNull();
+    expect(body.record).toMatchObject({ v: 2, e: "signer@gmail.com", h: hashHexToB64url(fileHex) });
+    expect(records.size).toBe(0);
+    expect(await log.size()).toBe(0);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("NOT persisted"), recordPutError);
+    // The record is self-contained and still verifies.
+    expect(await (await verify.POST(jsonRequest("http://t/api/verify", body.record))).json()).toMatchObject({ valid: true });
+    error.mockRestore();
   });
 
   it("countersigns a browser-held key's signature into a v3 record and verifies it", async () => {

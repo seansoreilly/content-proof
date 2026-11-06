@@ -26,6 +26,10 @@ function isServiceKey(userPublicKey: string): boolean {
  *   { fileHash }                                              → version 2 record
  *   { fileHash, timestamp, userPublicKey, userSignature }     → version 3 record
  *
+ * Responds `{ record, logIndex, logged }`. Storage failures do not block
+ * signing: `logged` is false and `logIndex` null when the record could not be
+ * stored or appended to the transparency log.
+ *
  * The file itself never reaches the server; the browser hashes it. For a
  * version 3 record the browser also signs `<hash>:<email>:<timestamp>` with the
  * account holder's own key, so it must choose the timestamp; the server accepts
@@ -73,11 +77,13 @@ export async function POST(request: Request): Promise<Response> {
       await getRecordStore().put(record);
       logIndex = await getLogStore().append(record);
     } catch (storeError) {
-      // Storage is optional; the record is self-contained.
-      console.warn("[sign] record store unavailable", storeError);
+      // The record is self-contained and verifies without storage, so the user
+      // still gets it. But a missing record or log entry must never be silent:
+      // log it loudly and tell the client through `logged`.
+      console.error("[sign] record NOT persisted / not in transparency log", storeError);
     }
 
-    return NextResponse.json({ record, logIndex }, { status: 200 });
+    return NextResponse.json({ record, logIndex, logged: logIndex !== null }, { status: 200 });
   } catch (error) {
     console.error("[sign] failed", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
