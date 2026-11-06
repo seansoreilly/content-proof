@@ -103,6 +103,15 @@ export function isRawPublicKey(value: unknown): value is string {
   }
 }
 
+/**
+ * True for a SHA-256 digest written as 64 hex characters, in either case.
+ * Clients may send uppercase hex; callers lowercase before signing.
+ */
+export function isHashHex(value: unknown): value is string {
+  return typeof value === "string" && HASH_HEX_RE.test(value);
+}
+
+/** True for a well-formed base64url Ed25519 signature (64 bytes, 86 characters). */
 export function isSignatureString(value: unknown): value is string {
   return typeof value === "string" && SIGNATURE_RE.test(value);
 }

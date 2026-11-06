@@ -3,7 +3,7 @@
 import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { MAX_FILE_SIZE_BYTES, sha256Hash } from "@/lib/hash";
+import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_LABEL, sha256Hash } from "@/lib/hash";
 import {
   verifyLegacyPayload,
   verifyRecord,
@@ -47,8 +47,6 @@ async function checkLogInclusion(record: SignatureRecord, keys: PublicKeysLoad["
     return { kind: "unavailable" };
   }
 }
-
-const MAX_FILE_SIZE_LABEL = `${Math.round(MAX_FILE_SIZE_BYTES / (1024 * 1024))} MB`;
 
 const HIDDEN_CHARS =/[​-‏‪-‮⁠-⁤⁦-⁩﻿]/g;
 

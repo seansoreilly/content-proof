@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
-import { encodeRecord } from "@/lib/record";
+import { encodeRecord, isSignatureString } from "@/lib/record";
 import { getLogStore, getRecordStore } from "@/lib/redis";
 import { rimTextFor } from "@/lib/seal-image";
 import { Seal } from "@/components/Seal";
@@ -11,8 +11,6 @@ import { Button, RecordSummary } from "@/components/ui";
 export const metadata: Metadata = { title: "Record" };
 
 export const dynamic = "force-dynamic";
-
-const SIGNATURE_RE = /^[A-Za-z0-9_-]{86}$/;
 
 /**
  * Public page for one issued record: what was attested, by which key, and
@@ -25,7 +23,7 @@ export default async function RecordPage({
   params: Promise<{ signature: string }>;
 }): Promise<React.JSX.Element> {
   const { signature } = await params;
-  if (!SIGNATURE_RE.test(signature)) notFound();
+  if (!isSignatureString(signature)) notFound();
 
   const record = await getRecordStore().get(signature).catch(() => null);
   if (!record) notFound();

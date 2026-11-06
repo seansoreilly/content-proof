@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { corsHeaders, corsPreflight } from "@/lib/http";
+import { isSignatureString } from "@/lib/record";
 import { getRecordStore } from "@/lib/redis";
-
-const SIGNATURE_RE = /^[A-Za-z0-9_-]{86}$/;
 
 /**
  * GET /api/sig/[signature]  →  stored signature record, if the service keeps one.
@@ -19,7 +18,7 @@ export async function GET(
   { params }: { params: Promise<{ signature: string }> }
 ): Promise<Response> {
   const { signature } = await params;
-  if (!SIGNATURE_RE.test(signature ?? "")) {
+  if (!isSignatureString(signature)) {
     return NextResponse.json({ error: "Invalid signature id" }, { status: 400, headers: corsHeaders() });
   }
 

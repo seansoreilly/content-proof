@@ -5,10 +5,9 @@ import { InvalidUserSignatureError, signFileHash, type UserSignature } from "@/l
 import { base64ToBytes, toBase64Url } from "@/lib/base64";
 import { buildPublicKeysJson } from "@/lib/keys";
 import { createRateLimiter, rateLimitedResponse } from "@/lib/rate-limit";
-import { isRawPublicKey, isSignatureString } from "@/lib/record";
+import { isHashHex, isRawPublicKey, isSignatureString } from "@/lib/record";
 import { getCounterStore, getLogStore, getRecordStore } from "@/lib/redis";
 
-const HASH_HEX_RE = /^[0-9a-fA-F]{64}$/;
 /** How far the client's proposed timestamp may differ from the server clock. */
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
@@ -62,7 +61,7 @@ export async function POST(request: Request): Promise<Response> {
       userPublicKey?: unknown;
       userSignature?: unknown;
     };
-    if (typeof input.fileHash !== "string" || !HASH_HEX_RE.test(input.fileHash)) {
+    if (!isHashHex(input.fileHash)) {
       return NextResponse.json({ error: "Invalid fileHash" }, { status: 400 });
     }
 

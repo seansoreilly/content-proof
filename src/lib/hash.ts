@@ -7,6 +7,9 @@ import type { HashWorkerResponse } from "@/lib/hash.worker";
  */
 export const MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024;
 
+/** The limit as shown to people, e.g. "500 MB". */
+export const MAX_FILE_SIZE_LABEL = `${Math.round(MAX_FILE_SIZE_BYTES / (1024 * 1024))} MB`;
+
 /**
  * Hash in a module Web Worker so a large file does not freeze the page.
  * Rejects if the worker cannot start or fails, so the caller can fall back.

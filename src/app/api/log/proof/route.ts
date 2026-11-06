@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { corsHeaders, corsPreflight, parseNonNegativeInt } from "@/lib/http";
 import { buildInclusionProof } from "@/lib/log-head";
 import { createRateLimiter, getClientIp, rateLimitedResponse } from "@/lib/rate-limit";
+import { isSignatureString } from "@/lib/record";
 import { getCounterStore, getLogStore } from "@/lib/redis";
 
-const SIGNATURE_RE = /^[A-Za-z0-9_-]{86}$/;
 const LIMIT = 60;
 const limiter = createRateLimiter(getCounterStore(), { limit: LIMIT, windowSeconds: 60, prefix: "rl:log-proof" });
 
@@ -41,7 +41,7 @@ export async function GET(request: Request): Promise<Response> {
       index = parseNonNegativeInt(indexParam);
       if (index === null) return fail("index must be a non-negative integer", 400);
     } else if (signature !== null) {
-      if (!SIGNATURE_RE.test(signature)) return fail("Invalid signature", 400);
+      if (!isSignatureString(signature)) return fail("Invalid signature", 400);
       index = await log.indexOf(signature);
       if (index === null) return fail("Record not in log", 404);
     } else {

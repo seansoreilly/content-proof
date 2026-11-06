@@ -8,6 +8,7 @@ import {
   extractPayloadFromUrl,
   hashB64urlToHex,
   hashHexToB64url,
+  isHashHex,
   parseRecordObject,
   type SignatureRecord,
 } from "@/lib/record";
@@ -107,5 +108,22 @@ describe("strict record object parsing", () => {
     expect(decodeRecord(wire.replace(`~${base.t}~`, "~1e12~"))).toBeNull();
     expect(decodeRecord(wire.replace(`~${base.t}~`, "~-1~"))).toBeNull();
     expect(decodeRecord(wire.replace(`~${base.t}~`, "~99999999999999999999~"))).toBeNull();
+  });
+});
+
+describe("isHashHex", () => {
+  it("accepts 64 hex characters in either case", () => {
+    expect(isHashHex("a".repeat(64))).toBe(true);
+    expect(isHashHex("0123456789abcdefABCDEF".padEnd(64, "0"))).toBe(true);
+    expect(isHashHex(sha256Hex("x").toUpperCase())).toBe(true);
+  });
+
+  it("rejects wrong lengths, non-hex characters and non-strings", () => {
+    for (const bad of ["", "a".repeat(63), "a".repeat(65), "g".repeat(64), ` ${"a".repeat(63)}`, `${"a".repeat(64)}\n`]) {
+      expect(isHashHex(bad)).toBe(false);
+    }
+    for (const bad of [undefined, null, 42, ["a".repeat(64)], { length: 64 }]) {
+      expect(isHashHex(bad)).toBe(false);
+    }
   });
 });

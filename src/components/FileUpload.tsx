@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { QrCodeGenerator } from "@/components/QrCodeGenerator";
-import { MAX_FILE_SIZE_BYTES, sha256Hash } from "@/lib/hash";
+import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_LABEL, sha256Hash } from "@/lib/hash";
 import { buildSignedMessage, parseRecordObject, type SignatureRecord } from "@/lib/record";
 import { getOrCreateUserKey, type UserSigningKey } from "@/lib/user-keys";
 import { track, type SignFailureType } from "@/lib/analytics";
@@ -16,8 +16,6 @@ interface HashResult {
   fileSize: number;
   hash: string;
 }
-
-const MAX_FILE_SIZE_LABEL = `${Math.round(MAX_FILE_SIZE_BYTES / (1024 * 1024))} MB`;
 
 function formatSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
