@@ -180,7 +180,7 @@ export function useBatchSigner(email: string): BatchSigner {
               dispatch({ type: "fileFailed", run, id, message: outcome.message });
               continue;
             }
-            dispatch({ type: "signed", run, id, record: outcome.record });
+            dispatch({ type: "signed", run, id, record: outcome.record, logged: outcome.logged });
             track("sign_file", { key_type: key === "unsupported" ? "service_only" : "user_key", is_image: isImage });
           } catch (err) {
             // Cancel already settled the batch; an abort is not a failure to report.

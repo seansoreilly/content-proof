@@ -53,7 +53,17 @@ export function SignedResult({ entry, previewUrl }: SignedResultProps): ReactEle
         </dl>
       )}
 
-      {entry.status.kind === "done" && <QrCodeGenerator record={entry.status.record} />}
+      {entry.status.kind === "done" && (
+        <div className="flex flex-col gap-3">
+          <QrCodeGenerator record={entry.status.record} />
+          {!entry.status.logged && (
+            <p className="text-sm text-mute" data-testid="not-logged">
+              Signed, but the service could not store this record or add it to the transparency log. The seal still
+              verifies; keep it safe.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

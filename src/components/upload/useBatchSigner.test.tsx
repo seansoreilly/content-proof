@@ -88,6 +88,7 @@ describe("useBatchSigner after this browser's key is revoked", () => {
     await act(() => result.current.signFiles(fileList("a.txt", "b.txt"), "picker"));
 
     expect(result.current.state.entries.map((entry) => entry.status.kind)).toEqual(["done", "done"]);
+    expect(result.current.state.entries[0].status).toMatchObject({ kind: "done", logged: true });
     expect(rotateUserKey).toHaveBeenCalledTimes(1);
     const sentKeys = fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).userPublicKey);
     expect(sentKeys).toEqual([OLD_KEY, NEW_KEY, NEW_KEY]);

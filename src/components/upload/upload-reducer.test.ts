@@ -58,8 +58,10 @@ describe("uploadReducer", () => {
     expect(signing.entries[0]).toMatchObject({ hash: "ab", status: { kind: "signing" } });
     expect(currentEntry(signing)?.id).toBe(0);
 
-    const done = run([{ type: "signed", run: 1, id: 0, record: record(1) }], signing);
-    expect(done.entries[0].status).toEqual({ kind: "done", record: record(1) });
+    const done = run([{ type: "signed", run: 1, id: 0, record: record(1), logged: true }], signing);
+    expect(done.entries[0].status).toEqual({ kind: "done", record: record(1), logged: true });
+    const unlogged = run([{ type: "signed", run: 1, id: 0, record: record(1), logged: false }], signing);
+    expect(unlogged.entries[0].status).toEqual({ kind: "done", record: record(1), logged: false });
     expect(currentEntry(done)).toBeNull();
   });
 
@@ -78,8 +80,8 @@ describe("uploadReducer", () => {
   it("moves the selection to the most recently signed file until one is picked", () => {
     const twoDone = run(
       [
-        { type: "signed", run: 1, id: 0, record: record(1) },
-        { type: "signed", run: 1, id: 1, record: record(2) },
+        { type: "signed", run: 1, id: 0, record: record(1), logged: true },
+        { type: "signed", run: 1, id: 1, record: record(2), logged: true },
       ],
       started,
     );
@@ -88,7 +90,7 @@ describe("uploadReducer", () => {
     const picked = run(
       [
         { type: "entrySelected", id: 0 },
-        { type: "signed", run: 1, id: 2, record: record(3) },
+        { type: "signed", run: 1, id: 2, record: record(3), logged: true },
       ],
       twoDone,
     );
@@ -117,7 +119,7 @@ describe("uploadReducer", () => {
   it("stops the batch: the current file fails and the rest are not signed", () => {
     const state = run(
       [
-        { type: "signed", run: 1, id: 0, record: record(1) },
+        { type: "signed", run: 1, id: 0, record: record(1), logged: true },
         { type: "hashed", run: 1, id: 1, hash: "cd" },
         { type: "batchStopped", run: 1, id: 1, message: "Too many signing requests.", needsSignIn: false },
       ],
@@ -156,7 +158,7 @@ describe("uploadReducer", () => {
     it("keeps finished files and marks the rest as not signed", () => {
       const state = run(
         [
-          { type: "signed", run: 1, id: 0, record: record(1) },
+          { type: "signed", run: 1, id: 0, record: record(1), logged: true },
           { type: "hashStarted", run: 1, id: 1, total: 20 },
           { type: "cancelled" },
         ],
@@ -180,7 +182,7 @@ describe("uploadReducer", () => {
     expect(uploadReducer(cancelled, { type: "hashStarted", run: 1, id: 0, total: 10 })).toBe(cancelled);
 
     const second = run([{ type: "batchStarted", run: 2, files: files.slice(0, 1), note: null }], cancelled);
-    expect(uploadReducer(second, { type: "signed", run: 1, id: 0, record: record(1) })).toBe(second);
+    expect(uploadReducer(second, { type: "signed", run: 1, id: 0, record: record(1), logged: true })).toBe(second);
     expect(uploadReducer(second, { type: "batchFinished", run: 1 })).toBe(second);
   });
 

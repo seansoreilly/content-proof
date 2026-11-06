@@ -14,7 +14,18 @@ const record = {
 describe("interpretSignResponse", () => {
   it("returns the record from a successful response", () => {
     const outcome = interpretSignResponse(200, { record, logIndex: 3, logged: true });
-    expect(outcome).toEqual({ ok: true, record });
+    expect(outcome).toEqual({ ok: true, record, logged: true });
+  });
+
+  it("carries whether the record was logged, counting a missing field as logged", () => {
+    expect(interpretSignResponse(200, { record, logIndex: null, logged: false })).toEqual({
+      ok: true,
+      record,
+      logged: false,
+    });
+    expect(interpretSignResponse(200, { record })).toEqual({ ok: true, record, logged: true });
+    // Only an explicit false means "not logged".
+    expect(interpretSignResponse(200, { record, logged: "no" })).toMatchObject({ logged: true });
   });
 
   it("rejects a successful response without a valid record", () => {

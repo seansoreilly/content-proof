@@ -14,6 +14,7 @@ const entries: UploadEntry[] = [
     status: {
       kind: "done",
       record: { v: 2, k: "AAAAAAAAAAAAAAAA", h: "A".repeat(43), e: "a@example.com", t: 1, s: "B".repeat(86) },
+      logged: true,
     },
   },
   { id: 1, name: "empty.txt", size: 0, isImage: false, hash: null, status: { kind: "failed", message: "The selected file is empty." } },

@@ -4,7 +4,16 @@ import { USER_KEY_REVOKED_MESSAGE } from "@/lib/user-key-status";
 
 /** What the upload page should do with one answer from `/api/sign`. */
 export type SignResponseOutcome =
-  | { ok: true; record: SignatureRecord }
+  | {
+      ok: true;
+      record: SignatureRecord;
+      /**
+       * Whether the service stored the record and added it to the transparency
+       * log. Signing does not wait on storage, so a valid record can come back
+       * unlogged; a response without the field counts as logged.
+       */
+      logged: boolean;
+    }
   | {
       ok: false;
       message: string;
@@ -64,5 +73,6 @@ export function interpretSignResponse(status: number, body: unknown): SignRespon
 
   const record = parseRecordObject(body && typeof body === "object" ? (body as { record?: unknown }).record : null);
   if (!record) return failure("The server returned an unexpected response.", "invalid_response");
-  return { ok: true, record };
+  const logged = (body as { logged?: unknown }).logged !== false;
+  return { ok: true, record, logged };
 }

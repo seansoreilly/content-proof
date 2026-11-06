@@ -11,7 +11,8 @@ export type EntryStatus =
   | { kind: "queued" }
   | { kind: "hashing"; done: number; total: number }
   | { kind: "signing" }
-  | { kind: "done"; record: SignatureRecord }
+  /** `logged` is false when the service could not store or log the record. */
+  | { kind: "done"; record: SignatureRecord; logged: boolean }
   | { kind: "failed"; message: string }
   /** Never attempted because the batch stopped or was cancelled first. */
   | { kind: "skipped"; reason: string };
@@ -52,7 +53,7 @@ export type UploadAction =
   | { type: "hashStarted"; run: number; id: number; total: number }
   | { type: "hashProgress"; run: number; id: number; done: number; total: number }
   | { type: "hashed"; run: number; id: number; hash: string }
-  | { type: "signed"; run: number; id: number; record: SignatureRecord }
+  | { type: "signed"; run: number; id: number; record: SignatureRecord; logged: boolean }
   | { type: "fileFailed"; run: number; id: number; message: string }
   | { type: "batchStopped"; run: number; id: number; message: string; needsSignIn: boolean }
   | { type: "batchFinished"; run: number }
@@ -141,7 +142,7 @@ export function uploadReducer(state: UploadState, action: UploadAction): UploadS
     case "signed": {
       const next = updateEntry(state, action.id, (entry) => ({
         ...entry,
-        status: { kind: "done", record: action.record },
+        status: { kind: "done", record: action.record, logged: action.logged },
       }));
       return state.pinned ? next : { ...next, selectedId: action.id };
     }
