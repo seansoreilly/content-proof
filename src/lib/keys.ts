@@ -23,7 +23,13 @@ export interface SigningKeyPair {
   keyId: string;
 }
 
-let developmentPair: SigningKeyPair | null = null;
+/**
+ * The throwaway development pair lives on globalThis so every bundle layer in
+ * a Next dev process (each route handler, server components) shares one key,
+ * and a recompile does not mint a new key mid-session.
+ */
+const devPairKey = "__contentproofDevSigningPair" as const;
+const devGlobal = globalThis as typeof globalThis & { [devPairKey]?: SigningKeyPair };
 
 function toSigningKeyPair(privateKey: KeyObject, publicKey: KeyObject): SigningKeyPair {
   const publicKeyBase64 = publicKey.export({ type: "spki", format: "der" }).toString("base64");
@@ -46,15 +52,15 @@ export function getSigningKeyPair(): SigningKeyPair {
     );
   }
 
-  if (!developmentPair) {
+  if (!devGlobal[devPairKey]) {
     console.warn(
       "[keys] ED25519 keys not configured; using a throwaway development key pair. " +
         "Signatures from this process cannot be verified after restart."
     );
     const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-    developmentPair = toSigningKeyPair(privateKey, publicKey);
+    devGlobal[devPairKey] = toSigningKeyPair(privateKey, publicKey);
   }
-  return developmentPair;
+  return devGlobal[devPairKey];
 }
 
 /**
