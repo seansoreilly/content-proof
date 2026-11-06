@@ -74,6 +74,28 @@ Key document:
 The in-app verifier does this in the browser and caches the key set for offline
 use. It never trusts a key carried inside the QR code.
 
+To verify in your own code, import or vendor `src/lib/verifier/index.ts`
+(with the few `src/lib` modules it imports: `record`, `keyset`,
+`keyset-client`, `crypto/verify`, `verify-input`, `base64`, `hash-stream`;
+point the `@/` alias at wherever you place them). It has no Next,
+Node or DOM dependencies, only `@noble/hashes` and `@noble/curves`, and runs
+in browsers, Node 18+ and edge runtimes:
+
+```ts
+import { verifyFile, parseRecordInput, verifyRecordAgainstHash } from "@/lib/verifier";
+
+// Parses a compact record, a verification link or a pasted/wrapped form,
+// streams the file through SHA-256 and fetches the published keys.
+const result = await verifyFile(linkOrRecord, file, { baseUrl: "https://www.contentproof.app" });
+// { ok, keyId, userSigned, userKey, reason, record, fileHash, inputError? }
+```
+
+Keys come only from `options.keys` or `${baseUrl}/.well-known/public-keys.json`,
+never from the record. Unparseable input returns `reason: "malformed"` with an
+`inputError`; keys that cannot be loaded throw, so an outage is never reported
+as `unknown-key`. Legacy pre-version-2 payloads are rejected; the verify page
+still handles them.
+
 ### Version 3: the account holder's own signature
 
 When the browser can hold a key, records are version 3 and carry two
@@ -109,9 +131,36 @@ Optional endpoints:
 - `GET /api/sig/<signature>` returns the stored record `{v,h,e,t,s,k}` when
   storage is configured. The core flow does not need it. `/sig/<signature>` is
   the human-readable page for the same record.
-- `POST /api/verify` with JSON `{v,k,h,e,t,s}` (plus `u`,`us` for version 3)
-  returns `{valid, keyId, userSigned, userKey, reason}` for server-side
-  verification. `v` and `t` must be JSON numbers. Rate limited, CORS enabled.
+- `POST /api/verify` verifies a record server-side and returns
+  `{valid, keyId, userSigned, userKey, reason}`. Rate limited (60 per minute
+  per IP), CORS enabled. The body is one of:
+  - the record as a JSON object `{v,k,h,e,t,s}` (plus `u`,`us` for version 3),
+    where `v` and `t` must be JSON numbers;
+  - `{"record": "<compact record or verification link>"}`, accepting the same
+    pasted forms as the verify page (`2~…`/`3~…`, a full link, a bare `#P=`
+    fragment, wrapped in quotes or `<>`).
+
+  Either form may add `"fileHash"`, the file's SHA-256 as 64 hex characters.
+  The server never sees the file: without `fileHash` a `valid: true` only
+  means the service issued the record, and you must still compare its hash
+  with your file; with it the comparison happens here and a different file
+  returns `valid: false, reason: "hash-mismatch"`. `reason` is otherwise one
+  of `unknown-key`, `bad-signature`, `bad-user-signature` or `malformed`.
+  An unparseable `record`, a legacy payload or a malformed `fileHash` returns
+  400 with `{error}`.
+
+  ```sh
+  # A verification link (or compact record) plus the file's hash
+  curl -s https://www.contentproof.app/api/verify \
+    -H 'content-type: application/json' \
+    -d "{\"record\": \"https://www.contentproof.app/verify#P=2~…\", \"fileHash\": \"$(shasum -a 256 photo.jpg | cut -d' ' -f1)\"}"
+
+  # The JSON object form, record only
+  curl -s https://www.contentproof.app/api/verify \
+    -H 'content-type: application/json' \
+    -d '{"v":2,"k":"…","h":"…","e":"you@example.com","t":1760000000000,"s":"…"}'
+  # → {"valid":true,"keyId":"…","userSigned":false,"userKey":null,"reason":null}
+  ```
 - `GET /api/health` returns
   `{ok, storage: {durable, backend}, log: {size}, keyId}`. `backend` is
   `"redis"` or `"memory"`; `durable: false` means records and the

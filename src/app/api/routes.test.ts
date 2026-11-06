@@ -7,6 +7,8 @@ import { createMemoryStore } from "@/lib/rate-limit";
 import { createMemoryLogStore } from "@/lib/log-store";
 import { recordLeafHash, verifyInclusionProof, verifyLogHead, verifyRecordInclusion, type InclusionProofResponse, type SignedLogHead } from "@/lib/log-verify";
 import { parsePublicKeysJson } from "@/lib/keyset";
+import { createVerificationUrl } from "@/lib/record";
+import { stringToBase64Url } from "@/lib/base64";
 
 const session = { user: { email: "signer@gmail.com" } as { email: string } | null };
 
@@ -377,5 +379,101 @@ describe("API routes", () => {
       params: Promise.resolve({ signature: "A".repeat(86) }),
     });
     expect(missing.status).toBe(404);
+  });
+});
+
+describe("POST /api/verify: compact records, links and fileHash", () => {
+  const fileHex = sha256Hex("my file");
+
+  beforeEach(() => {
+    records.clear();
+    log = createMemoryLogStore();
+    recordPutError = null;
+    session.user = { email: "signer@gmail.com" };
+    stubServerKeys();
+  });
+
+  async function signed(): Promise<{ verify: Awaited<ReturnType<typeof routes>>["verify"]; record: SignatureRecord }> {
+    const { sign, verify } = await routes();
+    const res = await sign.POST(jsonRequest("http://t/api/sign", { fileHash: fileHex }));
+    const { record } = (await res.json()) as { record: SignatureRecord };
+    return { verify, record };
+  }
+
+  async function post(
+    verify: Awaited<ReturnType<typeof routes>>["verify"],
+    body: unknown
+  ): Promise<{ status: number; json: Record<string, unknown> }> {
+    const res = await verify.POST(jsonRequest("http://t/api/verify", body));
+    return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+  }
+
+  it("accepts a compact record string and a full verification link", async () => {
+    const { verify, record } = await signed();
+    const expected = { valid: true, keyId: record.k, userSigned: false, userKey: null, reason: null };
+    expect(await post(verify, { record: encodeRecord(record) })).toEqual({ status: 200, json: expected });
+    const url = createVerificationUrl(encodeRecord(record), "https://www.contentproof.app");
+    expect(await post(verify, { record: url })).toEqual({ status: 200, json: expected });
+    expect(await post(verify, { record: `  <${url}>\n` })).toEqual({ status: 200, json: expected });
+  });
+
+  it("verifies against fileHash when given, in either body form", async () => {
+    const { verify, record } = await signed();
+    const other = sha256Hex("a different file");
+    for (const base of [{ record: encodeRecord(record) }, record]) {
+      expect(await post(verify, { ...base, fileHash: fileHex })).toMatchObject({ status: 200, json: { valid: true } });
+      expect(await post(verify, { ...base, fileHash: fileHex.toUpperCase() })).toMatchObject({
+        status: 200,
+        json: { valid: true },
+      });
+      expect(await post(verify, { ...base, fileHash: other })).toEqual({
+        status: 200,
+        json: { valid: false, keyId: null, userSigned: false, userKey: null, reason: "hash-mismatch" },
+      });
+    }
+  });
+
+  it("still reports a forged compact record as unknown-key even with a matching fileHash", async () => {
+    const { verify } = await routes();
+    const rogue = makeKeyPair();
+    const t = Date.now();
+    const forged: SignatureRecord = {
+      v: 2,
+      k: keyIdFromSpkiBase64(rogue.publicKeyBase64),
+      h: hashHexToB64url(fileHex),
+      e: "ceo@gmail.com",
+      t,
+      s: rogue.signHex(buildSignedMessage(fileHex, "ceo@gmail.com", t)),
+    };
+    expect(await post(verify, { record: encodeRecord(forged), fileHash: fileHex })).toMatchObject({
+      status: 200,
+      json: { valid: false, reason: "unknown-key" },
+    });
+  });
+
+  it("returns 400 for an unparseable or legacy record string and a malformed fileHash", async () => {
+    const { verify, record } = await signed();
+    const garbage = await post(verify, { record: "garbage" });
+    expect(garbage.status).toBe(400);
+    expect(garbage.json.error).toMatch(/Invalid record/);
+    expect((await post(verify, { record: "" })).status).toBe(400);
+
+    const legacy = stringToBase64Url(JSON.stringify({ signature: "x", publicKey: "y", timestamp: 1 }));
+    const legacyRes = await post(verify, { record: legacy });
+    expect(legacyRes.status).toBe(400);
+    expect(legacyRes.json.error).toMatch(/legacy/i);
+
+    for (const fileHash of ["zz", fileHex.slice(1), 42, null]) {
+      for (const base of [{ record: encodeRecord(record) }, record]) {
+        const res = await post(verify, { ...base, fileHash });
+        expect(res.status).toBe(400);
+        expect(res.json.error).toMatch(/fileHash/);
+      }
+    }
+    expect((await post(verify, null)).status).toBe(400);
+    expect((await post(verify, { record: 5 })).status).toBe(400);
+    const huge = await post(verify, { record: `${encodeRecord(record)}${" ".repeat(5000)}` });
+    expect(huge.status).toBe(400);
+    expect(huge.json.error).toMatch(/Longer than/);
   });
 });
