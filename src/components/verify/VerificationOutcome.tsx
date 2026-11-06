@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import type { VerificationFailure, VerificationResult } from "@/lib/crypto/verify";
-import { VerifyResult } from "@/components/ui";
+import { LocalTime, VerifyResult } from "@/components/ui";
+import type { UserKeyStatus } from "@/lib/user-key-status";
 import { DisplayEmail, TimeText } from "./DisplayEmail";
 import { logStatusText, type LogStatus } from "./log-status";
 
@@ -22,10 +23,25 @@ export interface VerificationOutcomeProps {
   email: string;
   attestedMs: number;
   logStatus: LogStatus | null;
+  /** The account holder's key status, when it has been looked up. */
+  userKeyStatus?: UserKeyStatus | null;
+}
+
+/** When the record's own key has been revoked, per a status about that same key. */
+function revokedAt(result: VerificationResult, status: UserKeyStatus | null | undefined): number | null {
+  if (!result.ok || !result.userSigned || !status || status.publicKey !== result.userKey) return null;
+  return status.revokedAt;
 }
 
 /** The verdict, and for a current record what the transparency log says about it. */
-export function VerificationOutcome({ result, email, attestedMs, logStatus }: VerificationOutcomeProps): ReactElement {
+export function VerificationOutcome({
+  result,
+  email,
+  attestedMs,
+  logStatus,
+  userKeyStatus,
+}: VerificationOutcomeProps): ReactElement {
+  const keyRevokedAt = revokedAt(result, userKeyStatus);
   return (
     <section aria-live="polite">
       {result.ok ? (
@@ -52,6 +68,13 @@ export function VerificationOutcome({ result, email, attestedMs, logStatus }: Ve
             {logStatus && (
               <p className="text-sm text-mute" data-testid="log-status">
                 {logStatusText(logStatus)}
+              </p>
+            )}
+            {keyRevokedAt !== null && (
+              <p className="text-sm text-void" data-testid="user-key-status">
+                The account holder revoked this key on <LocalTime iso={new Date(keyRevokedAt).toISOString()} />.
+                Records it signed before then remain valid; anything presented as newer should be treated with
+                suspicion.
               </p>
             )}
           </div>

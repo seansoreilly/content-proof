@@ -85,6 +85,31 @@ describe("verifyReducer", () => {
     expect(verifyReducer(done, { type: "logChecked", run: 1, status: { kind: "absent" } })).toBe(done);
   });
 
+  it("records the account holder's key status for the current run only", () => {
+    const revoked = { publicKey: "U".repeat(43), known: true, revokedAt: 5000 };
+    const done = run(
+      ready,
+      { type: "verifyStarted", run: 1, total: 5 },
+      { type: "verified", run: 1, result: success, subject: { email: "a@example.com", attestedMs: 1 }, checkLog: true },
+    );
+    expect(done.userKeyStatus).toBeNull();
+    const checked = verifyReducer(done, { type: "userKeyChecked", run: 1, status: revoked });
+    expect(checked.userKeyStatus).toEqual(revoked);
+    // The status is advisory: the verdict and the log check are untouched.
+    expect(checked.phase).toBe(done.phase);
+    expect(checked.logStatus).toBe(done.logStatus);
+    // A lookup that failed leaves it unknown.
+    expect(verifyReducer(done, { type: "userKeyChecked", run: 1, status: null }).userKeyStatus).toBeNull();
+    // A late answer for an earlier run is dropped.
+    const rerun = verifyReducer(checked, { type: "verifyStarted", run: 2, total: 5 });
+    expect(rerun.userKeyStatus).toBeNull();
+    expect(verifyReducer(rerun, { type: "userKeyChecked", run: 1, status: revoked })).toBe(rerun);
+    // Changing the file ends the run and clears the status.
+    const changed = verifyReducer(checked, { type: "fileChosen", file: new File(["other"], "b.txt") });
+    expect(changed.userKeyStatus).toBeNull();
+    expect(verifyReducer(changed, { type: "userKeyChecked", run: 1, status: revoked })).toBe(changed);
+  });
+
   it("returns to idle with no error when cancelled", () => {
     const s = run(ready, { type: "verifyStarted", run: 1, total: 5 }, { type: "cancelled" });
     expect(s.phase).toEqual({ kind: "idle" });

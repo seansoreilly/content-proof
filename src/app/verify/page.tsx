@@ -67,6 +67,7 @@ function VerifyPageContent(): React.JSX.Element {
               email={phase.subject?.email ?? ""}
               attestedMs={phase.subject?.attestedMs ?? 0}
               logStatus={state.logStatus}
+              userKeyStatus={state.userKeyStatus}
             />
           </>
         )}

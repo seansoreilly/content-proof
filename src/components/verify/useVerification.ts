@@ -7,6 +7,7 @@ import { isAbortError, sha256Hash } from "@/lib/hash";
 import { loadPublicKeys } from "@/lib/keyset-client";
 import { decodeQrFile } from "@/lib/qr-decode";
 import { extractPayloadFromUrl } from "@/lib/record";
+import { fetchUserKeyStatus } from "@/lib/user-key-status";
 import { parseVerificationInput } from "@/lib/verify-input";
 import { checkLogInclusion } from "./log-status";
 import {
@@ -183,6 +184,14 @@ export function useVerification({ legacyQuery, sessionEmail }: UseVerificationOp
       if (checkLog) {
         void checkLogInclusion(loaded.record, keys.keys).then((status) =>
           dispatch({ type: "logChecked", run, status }),
+        );
+      }
+      // A revoked key does not undo a valid signature, but a verifier should
+      // know the account holder has disowned it. The run guard drops a late
+      // answer for a check that has since been replaced.
+      if (outcome.ok && outcome.userSigned && outcome.userKey) {
+        void fetchUserKeyStatus(outcome.userKey).then((status) =>
+          dispatch({ type: "userKeyChecked", run, status }),
         );
       }
     } catch (err) {

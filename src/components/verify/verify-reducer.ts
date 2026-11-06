@@ -1,6 +1,7 @@
 import type { VerificationResult } from "@/lib/crypto/verify";
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_LABEL } from "@/lib/hash";
 import type { PublicKeysLoad } from "@/lib/keyset-client";
+import type { UserKeyStatus } from "@/lib/user-key-status";
 import type { LoadedInput } from "@/lib/verify-input";
 import type { LogStatus } from "./log-status";
 
@@ -41,6 +42,11 @@ export interface VerifyState {
   phase: VerifyPhase;
   logStatus: LogStatus | null;
   /**
+   * The public revocation status of the account holder's key, once a
+   * user-signed record has verified. Null while unknown or unavailable.
+   */
+  userKeyStatus: UserKeyStatus | null;
+  /**
    * The check whose asynchronous results may still land, or null. Anything
    * that changes the file or record ends the run, so a slower earlier check
    * cannot overwrite the current state. It survives `done`, because the log
@@ -72,6 +78,8 @@ export type VerifyAction =
   | { type: "verified"; run: number; result: VerificationResult; subject: CheckedSubject; checkLog: boolean }
   | { type: "verifyFailed"; run: number }
   | { type: "logChecked"; run: number; status: LogStatus }
+  /** The key status lookup finished; null when it could not be had. */
+  | { type: "userKeyChecked"; run: number; status: UserKeyStatus | null }
   | { type: "cancelled" };
 
 export const initialVerifyState: VerifyState = {
@@ -87,6 +95,7 @@ export const initialVerifyState: VerifyState = {
   decodingQr: false,
   phase: { kind: "idle" },
   logStatus: null,
+  userKeyStatus: null,
   run: null,
 };
 
@@ -116,7 +125,7 @@ export function endsRun(action: VerifyAction): boolean {
 
 /** The one reset that used to be repeated by hand: no check, no result. */
 function endRun(state: VerifyState): VerifyState {
-  return { ...state, run: null, phase: { kind: "idle" }, logStatus: null };
+  return { ...state, run: null, phase: { kind: "idle" }, logStatus: null, userKeyStatus: null };
 }
 
 export function verifyReducer(state: VerifyState, action: VerifyAction): VerifyState {
@@ -171,6 +180,7 @@ export function verifyReducer(state: VerifyState, action: VerifyAction): VerifyS
         inputError: null,
         phase: { kind: "hashing", done: 0, total: action.total },
         logStatus: null,
+        userKeyStatus: null,
       };
     case "hashProgress":
       if (action.run !== state.run || state.phase.kind !== "hashing") return state;
@@ -181,6 +191,7 @@ export function verifyReducer(state: VerifyState, action: VerifyAction): VerifyS
         ...state,
         phase: { kind: "done", result: action.result, subject: action.subject },
         logStatus: action.checkLog ? { kind: "checking" } : null,
+        userKeyStatus: null,
       };
     case "verifyFailed":
       if (action.run !== state.run) return state;
@@ -188,10 +199,14 @@ export function verifyReducer(state: VerifyState, action: VerifyAction): VerifyS
         ...state,
         phase: { kind: "done", result: { ok: false, reason: "malformed" }, subject: null },
         logStatus: null,
+        userKeyStatus: null,
       };
     case "logChecked":
       if (action.run !== state.run) return state;
       return { ...state, logStatus: action.status };
+    case "userKeyChecked":
+      if (action.run !== state.run) return state;
+      return { ...state, userKeyStatus: action.status };
   }
 }
 
