@@ -210,9 +210,8 @@ Optional:
   only tells the sign-in button to call it. The public flag alone grants
   nothing; the button falls back to Google.
 - `NEXT_PUBLIC_VERIFY_BASE_URL`: base URL used in QR codes.
-- `NEXT_PUBLIC_GA_MEASUREMENT_ID`: Google Analytics measurement ID. Unset uses
-  ContentProof's own ID; set it to an empty value or `off` to disable GA in a
-  fork. GA only ever loads on the production hostnames (`contentproof.app`,
+- `NEXT_PUBLIC_GA_MEASUREMENT_ID`: Google Analytics measurement ID. Unset or empty
+  uses ContentProof's own ID; set it to `off` to disable GA in a fork. GA only ever loads on the production hostnames (`contentproof.app`,
   `www.contentproof.app`), and only after the visitor accepts the consent
   banner. The choice is stored in the browser's localStorage under
   `contentproof.analytics-consent.v1`; declining keeps the gtag script from

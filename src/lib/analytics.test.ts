@@ -152,13 +152,13 @@ describe("shouldShowConsentBanner", () => {
 });
 
 describe("resolveGaTrackingId", () => {
-  it("keeps the default ID when unset", () => {
+  it("keeps the default ID when unset or empty", () => {
     expect(resolveGaTrackingId(undefined)).toBe(DEFAULT_GA_TRACKING_ID);
+    expect(resolveGaTrackingId("")).toBe(DEFAULT_GA_TRACKING_ID);
+    expect(resolveGaTrackingId("  ")).toBe(DEFAULT_GA_TRACKING_ID);
   });
 
-  it("disables GA for an empty value or off", () => {
-    expect(resolveGaTrackingId("")).toBeNull();
-    expect(resolveGaTrackingId("  ")).toBeNull();
+  it("disables GA for off", () => {
     expect(resolveGaTrackingId("off")).toBeNull();
     expect(resolveGaTrackingId("OFF")).toBeNull();
   });

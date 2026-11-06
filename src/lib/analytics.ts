@@ -18,9 +18,11 @@ export const DEFAULT_GA_TRACKING_ID = "G-SXYXFW00DL";
  * a fork opts out without editing code.
  */
 export function resolveGaTrackingId(raw: string | undefined): string | null {
-  if (raw === undefined) return DEFAULT_GA_TRACKING_ID;
-  const value = raw.trim();
-  if (value === "" || value.toLowerCase() === "off") return null;
+  // An unset or empty value keeps the default, matching the old `||` fallback,
+  // so a deployment with an empty variable does not silently lose analytics.
+  const value = raw?.trim() ?? "";
+  if (value === "") return DEFAULT_GA_TRACKING_ID;
+  if (value.toLowerCase() === "off") return null;
   return value;
 }
 
@@ -29,7 +31,7 @@ export function resolveGaTrackingId(raw: string | undefined): string | null {
  *
  * GA only ever runs on the production hostnames below, and only once the
  * visitor has accepted the consent banner. A fork that does not want GA at all
- * sets NEXT_PUBLIC_GA_MEASUREMENT_ID to an empty value or "off"; the banner
+ * sets NEXT_PUBLIC_GA_MEASUREMENT_ID to "off" (an empty value keeps the default); the banner
  * then never renders and the gtag script is never requested.
  */
 export const GA_TRACKING_ID: string | null = resolveGaTrackingId(
