@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
-import { InvalidUserSignatureError, signFileHash, type UserSignature } from "@/lib/crypto/ed25519";
+import { InvalidUserSignatureError, signFileHash } from "@/lib/crypto/ed25519";
 import { base64ToBytes, toBase64Url } from "@/lib/base64";
 import { buildPublicKeysJson } from "@/lib/keys";
 import { createRateLimiter, rateLimitedResponse } from "@/lib/rate-limit";
-import { isHashHex, isRawPublicKey, isSignatureString } from "@/lib/record";
 import { getCounterStore, getLogStore, getRecordStore } from "@/lib/redis";
-
-/** How far the client's proposed timestamp may differ from the server clock. */
-const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+import { parseSignRequest } from "@/lib/sign-request";
 
 // 30 signatures per account per minute is generous for a human and a hard
 // ceiling for anything scripted.
@@ -55,40 +52,18 @@ export async function POST(request: Request): Promise<Response> {
     } catch {
       return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     }
-    const input = (body ?? {}) as {
-      fileHash?: unknown;
-      timestamp?: unknown;
-      userPublicKey?: unknown;
-      userSignature?: unknown;
-    };
-    if (!isHashHex(input.fileHash)) {
-      return NextResponse.json({ error: "Invalid fileHash" }, { status: 400 });
+    const now = Date.now();
+    const parsed = parseSignRequest(body, now, isServiceKey);
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
-
-    let timestamp = Date.now();
-    let user: UserSignature | undefined;
-    if (input.userPublicKey !== undefined || input.userSignature !== undefined || input.timestamp !== undefined) {
-      if (!isRawPublicKey(input.userPublicKey) || !isSignatureString(input.userSignature)) {
-        return NextResponse.json({ error: "Invalid user key or signature" }, { status: 400 });
-      }
-      if (isServiceKey(input.userPublicKey)) {
-        // A service signature over `<hash>:<email>:<t>` (v2) must never be
-        // replayable as a "user" signature, so service keys cannot be user keys.
-        return NextResponse.json({ error: "User key must not be a service key" }, { status: 400 });
-      }
-      if (typeof input.timestamp !== "number" || !Number.isInteger(input.timestamp)) {
-        return NextResponse.json({ error: "timestamp must be an integer (ms since epoch)" }, { status: 400 });
-      }
-      if (Math.abs(input.timestamp - Date.now()) > MAX_CLOCK_SKEW_MS) {
-        return NextResponse.json({ error: "timestamp is too far from server time" }, { status: 400 });
-      }
-      timestamp = input.timestamp;
-      user = { publicKey: input.userPublicKey, signature: input.userSignature };
-    }
+    const signRequest = parsed.request;
+    const timestamp = signRequest.kind === "user" ? signRequest.timestamp : now;
+    const user = signRequest.kind === "user" ? signRequest.user : undefined;
 
     let record;
     try {
-      record = signFileHash(input.fileHash, email, timestamp, user);
+      record = signFileHash(signRequest.fileHash, email, timestamp, user);
     } catch (error) {
       if (error instanceof InvalidUserSignatureError) {
         return NextResponse.json({ error: "User signature does not verify" }, { status: 400 });
