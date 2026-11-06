@@ -4,6 +4,7 @@ import {
   generateKeyPairSync,
   type KeyObject,
 } from "node:crypto";
+import { base64ToBytes, toBase64Url } from "@/lib/base64";
 import { keyIdFromSpkiBase64, type PublicKeysJson } from "@/lib/keyset";
 
 /**
@@ -78,6 +79,40 @@ export function buildPublicKeysJson(): PublicKeysJson {
     keys[keyId] = { keyId, algorithm: "Ed25519", publicKey };
   }
   return { current: current.keyId, keys };
+}
+
+/** Length of a raw Ed25519 public key; an SPKI DER encoding ends with these bytes. */
+const RAW_PUBLIC_KEY_BYTES = 32;
+
+let serviceRawKeysCache: { envKey: string; keys: ReadonlySet<string> } | null = null;
+
+/**
+ * Base64URL raw 32-byte public keys of every service key, current and
+ * historical, in the format browsers use for their own user keys.
+ *
+ * The sign route checks every version 3 request against this set, so it is
+ * memoised per process rather than rebuilt (and every SPKI re-decoded) on each
+ * request. The cache is keyed on the env values it derives from, so a key
+ * rotation or a test that stubs the env gets a fresh set. In development
+ * without configured keys the throwaway pair is itself fixed for the process,
+ * so caching it is safe. Errors (missing keys in production) are not cached.
+ */
+export function getServiceRawPublicKeys(): ReadonlySet<string> {
+  // Whether a private key is set decides between the configured pair and the
+  // development pair, so it is part of the key too (as a flag, not the secret).
+  const envKey = [
+    process.env.ED25519_PUBLIC_KEY?.trim() ?? "",
+    process.env.ED25519_PUBLIC_KEYS_PREVIOUS ?? "",
+    process.env.ED25519_PRIVATE_KEY?.trim() ? "1" : "0",
+  ].join("\n");
+  if (serviceRawKeysCache?.envKey === envKey) return serviceRawKeysCache.keys;
+
+  const spkiKeys = [getSigningKeyPair().publicKeyBase64, ...getHistoricalPublicKeys()];
+  const keys: ReadonlySet<string> = new Set(
+    spkiKeys.map((spki) => toBase64Url(base64ToBytes(spki).slice(-RAW_PUBLIC_KEY_BYTES)))
+  );
+  serviceRawKeysCache = { envKey, keys };
+  return keys;
 }
 
 /**

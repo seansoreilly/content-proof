@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
 import { InvalidUserSignatureError, signFileHash } from "@/lib/crypto/ed25519";
-import { base64ToBytes, toBase64Url } from "@/lib/base64";
-import { buildPublicKeysJson } from "@/lib/keys";
+import { getServiceRawPublicKeys } from "@/lib/keys";
 import { createRateLimiter, rateLimitedResponse } from "@/lib/rate-limit";
 import { getCounterStore, getLogStore, getRecordStore } from "@/lib/redis";
 import { parseSignRequest } from "@/lib/sign-request";
@@ -19,9 +18,7 @@ const limiter = createRateLimiter(getCounterStore(), {
 
 /** True when the base64url raw key equals the raw key of any published service key. */
 function isServiceKey(userPublicKey: string): boolean {
-  return Object.values(buildPublicKeysJson().keys).some(
-    (entry) => toBase64Url(base64ToBytes(entry.publicKey).slice(-32)) === userPublicKey
-  );
+  return getServiceRawPublicKeys().has(userPublicKey);
 }
 
 /**
