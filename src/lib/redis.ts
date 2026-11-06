@@ -2,6 +2,7 @@ import { Redis } from "@upstash/redis";
 import { createMemoryLogStore, createRedisLogStore, type LogStore } from "@/lib/log-store";
 import { createMemoryStore, createRedisCounterStore, type CounterStore } from "@/lib/rate-limit";
 import { createMemoryRecordStore, createRedisRecordStore, type RecordStore } from "@/lib/record-store";
+import { createMemoryUserKeyRegistry, createRedisUserKeyRegistry, type UserKeyRegistry } from "@/lib/user-key-registry";
 
 export type { RecordStore } from "@/lib/record-store";
 
@@ -32,6 +33,7 @@ interface MemoryStores {
   counters: CounterStore;
   records: RecordStore;
   log: LogStore;
+  userKeys: UserKeyRegistry;
 }
 const memoryKey = "__contentproofMemoryStores" as const;
 const globalStores = globalThis as typeof globalThis & { [memoryKey]?: MemoryStores };
@@ -41,11 +43,15 @@ const memory: MemoryStores =
     counters: createMemoryStore(),
     records: createMemoryRecordStore(),
     log: createMemoryLogStore(),
+    userKeys: createMemoryUserKeyRegistry(),
   });
+// A holder created by an older bundle (before hot reload added a store) lacks the newer fields.
+memory.userKeys ??= createMemoryUserKeyRegistry();
 
 let redisCounters: CounterStore | null = null;
 let redisRecords: RecordStore | null = null;
 let redisLog: LogStore | null = null;
+let redisUserKeys: UserKeyRegistry | null = null;
 
 export function getCounterStore(): CounterStore {
   const redis = getRedis();
@@ -103,4 +109,13 @@ export function getLogStore(): LogStore {
   if (!redis) return memory.log;
   if (!redisLog) redisLog = createRedisLogStore(redis);
   return redisLog;
+}
+
+/** Account browser keys and their revocation state. */
+export function getUserKeyRegistry(): UserKeyRegistry {
+  const redis = getRedis();
+  warnIfEphemeral(redis);
+  if (!redis) return memory.userKeys;
+  if (!redisUserKeys) redisUserKeys = createRedisUserKeyRegistry(redis);
+  return redisUserKeys;
 }

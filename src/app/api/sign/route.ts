@@ -4,8 +4,9 @@ import { authOptions } from "@/lib/auth/options";
 import { InvalidUserSignatureError, signFileHash } from "@/lib/crypto/ed25519";
 import { getServiceRawPublicKeys } from "@/lib/keys";
 import { createRateLimiter, rateLimitedResponse } from "@/lib/rate-limit";
-import { getCounterStore, getLogStore, getRecordStore } from "@/lib/redis";
+import { getCounterStore, getLogStore, getRecordStore, getUserKeyRegistry } from "@/lib/redis";
 import { parseSignRequest } from "@/lib/sign-request";
+import { isCorruptKeyEntryError } from "@/lib/user-key-registry";
 
 // 30 signatures per account per minute is generous for a human and a hard
 // ceiling for anything scripted.
@@ -35,6 +36,13 @@ function isServiceKey(userPublicKey: string): boolean {
  * account holder's own key, so it must choose the timestamp; the server accepts
  * it only within a small clock-skew window, verifies the user signature, then
  * countersigns.
+ *
+ * Version 3 requests are also checked against the key registry: a revoked key,
+ * or a key already registered to another account, is refused with 403, and a
+ * corrupt registry entry with 503. Any other registry failure (an outage) is
+ * logged and signing proceeds (fail open, like the
+ * rate limiter), because the registry guards key hygiene, not the validity of
+ * the signature itself.
  */
 export async function POST(request: Request): Promise<Response> {
   try {
@@ -62,6 +70,11 @@ export async function POST(request: Request): Promise<Response> {
     const timestamp = signRequest.kind === "user" ? signRequest.timestamp : now;
     const user = signRequest.kind === "user" ? signRequest.user : undefined;
 
+    if (user) {
+      const refusal = await checkUserKey(email, user.publicKey);
+      if (refusal) return NextResponse.json({ error: refusal.error }, { status: refusal.status });
+    }
+
     let record;
     try {
       record = signFileHash(signRequest.fileHash, email, timestamp, user);
@@ -83,9 +96,47 @@ export async function POST(request: Request): Promise<Response> {
       console.error("[sign] record NOT persisted / not in transparency log", storeError);
     }
 
+    if (user) await recordUserKey(email, user.publicKey, now);
+
     return NextResponse.json({ record, logIndex, logged: logIndex !== null }, { status: 200 });
   } catch (error) {
     console.error("[sign] failed", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+/** Why this account may not sign with the key, as a status and message, or null to proceed. */
+async function checkUserKey(email: string, publicKey: string): Promise<{ status: 403 | 503; error: string } | null> {
+  let owner;
+  try {
+    owner = await getUserKeyRegistry().lookup(publicKey);
+  } catch (error) {
+    if (isCorruptKeyEntryError(error)) {
+      // The unreadable entry may have recorded a revocation; do not guess.
+      console.error("[sign] key registry entry is corrupt; refusing", error);
+      return { status: 503, error: "Signing key status unavailable" };
+    }
+    console.error("[sign] key registry lookup failed; signing anyway", error);
+    return null;
+  }
+  if (!owner) return null;
+  if (owner.revokedAt !== undefined) return { status: 403, error: "This signing key has been revoked" };
+  if (owner.email !== email.toLowerCase()) {
+    return { status: 403, error: "This signing key is registered to another account" };
+  }
+  return null;
+}
+
+/**
+ * Record the key's first and last use. Runs after signing and never fails the
+ * request. The registry itself refuses to un-revoke or re-home a key, so a
+ * revocation racing this request cannot be undone by it.
+ */
+async function recordUserKey(email: string, publicKey: string, now: number): Promise<void> {
+  try {
+    const result = await getUserKeyRegistry().touch(email, publicKey, now);
+    if (result !== "recorded") console.warn(`[sign] key registry did not record the key: ${result}`);
+  } catch (error) {
+    console.error("[sign] key registry update failed", error);
   }
 }

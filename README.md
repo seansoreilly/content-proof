@@ -225,6 +225,36 @@ asks for the signer email.
 
 Any file type is accepted, up to 500 MB, hashed in the browser in chunks.
 
+## Account: records and signing keys
+
+The `/account` page (signed in) lists the account's records and the browser
+keys it has signed with.
+
+- `GET /api/account/records?limit=20&cursor=` → `{records: [{record,
+  logIndex?}], nextCursor}`, newest first, at most 50 per page. Records are
+  indexed by lowercased email when stored (Redis sorted set
+  `sigs:email:<email>` scored by `t`) and expire with the record after 365
+  days. Pass `nextCursor` back as `cursor` for the next page. Records issued
+  before the index existed are not backfilled, so they are not listed.
+- `GET /api/account/keys` → `{keys: [{publicKey, firstSeen, lastSeen,
+  revokedAt?}]}`.
+- `POST /api/account/keys/revoke` `{publicKey}` → `{key}`. Permanent. Only
+  the account's own keys can be revoked (404 otherwise).
+
+These three need a session and are same-origin only (no CORS).
+
+The service records each browser key the first time it countersigns with it
+(Redis hash `ukeys:<email>`, plus `ukey:<publicKey>` → `{email, revokedAt?}`),
+and pins it to that account. `POST /api/sign` then refuses, with 403, a
+version 3 request whose key is revoked or registered to another account. Any
+other registry failure is logged and signing goes ahead.
+
+- `GET /api/keys/user/<publicKey>` → `{publicKey, known, revokedAt}` (public,
+  CORS, rate limited per IP). It never reveals which account a key belongs
+  to. Revoking a key does not invalidate records it already signed; a verifier
+  can compare `revokedAt` with the record's time. `fetchUserKeyStatus` in
+  `src/lib/user-key-status.ts` is a browser-safe client for it.
+
 ## Getting started
 
 ```bash

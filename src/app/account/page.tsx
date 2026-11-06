@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactElement } from "react";
 import { getServerSession } from "next-auth";
+import { AccountKeys } from "@/components/account/AccountKeys";
 import { AccountRecords } from "@/components/account/AccountRecords";
 import { SignInButton } from "@/components/SignInButton";
 import { Eyebrow, Panel } from "@/components/ui";
@@ -30,6 +31,14 @@ export default async function AccountPage(): Promise<ReactElement> {
           <Panel as="section" className="flex flex-col gap-4">
             <Eyebrow>Your records</Eyebrow>
             <AccountRecords />
+          </Panel>
+          <Panel as="section" className="flex flex-col gap-4">
+            <Eyebrow>Your signing keys</Eyebrow>
+            <p className="text-sm text-mute">
+              Each browser you sign from holds its own key, which never leaves that browser. Revoke a key
+              from a lost or shared device so it cannot sign for this account again.
+            </p>
+            <AccountKeys />
           </Panel>
         </div>
       ) : (
