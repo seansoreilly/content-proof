@@ -151,6 +151,27 @@ describe("verify-log-head script: end to end", () => {
     expect(alone.code, alone.output).toBe(0);
   });
 
+  it("decides empty and same-size previous heads without a proof, and rejects tampering", async () => {
+    const emptyHead = await head();
+    const empty = save("empty-only.json", emptyHead);
+    await append(0, 4);
+    const fourHead = await head();
+    const four = save("four.json", fourHead);
+    // Signature checks would reject these on their own, so make the key unknown
+    // to reach the local consistency decision.
+    const badEmpty = save("bad-empty.json", { ...emptyHead, keyId: "unpublishedkey00", root: "00".repeat(32) });
+    const badSame = save("bad-same.json", { ...fourHead, keyId: "unpublishedkey00", root: "11".repeat(32) });
+
+    expect((await run(four, empty)).code).toBe(0);
+    expect((await run(four, four)).code).toBe(0);
+    const tamperedEmpty = await run(four, badEmpty);
+    expect(tamperedEmpty.code).toBe(1);
+    expect(tamperedEmpty.output).toContain("not the empty-tree root");
+    const rewritten = await run(four, badSame);
+    expect(rewritten.code).toBe(1);
+    expect(rewritten.output).toContain("the log was rewritten");
+  });
+
   it("still verifies when the log grows between the head and the proof", async () => {
     await append(0, 2);
     const prev = save("prev.json", await head());

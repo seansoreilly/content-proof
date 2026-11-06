@@ -238,6 +238,22 @@ async function main() {
   }
   if (prev.size > next.size) fail(`the log shrank: previous head has size ${prev.size}, new head ${next.size}`);
 
+  // Two cases are consistent by definition and need no proof from the service
+  // (RFC 9162 §2.1.4.2): an empty previous tree, and two heads of the same
+  // size, which must then carry the same root. Deciding them locally also
+  // keeps the archive working against a deployment without the consistency
+  // endpoint while the log is still empty.
+  if (prev.size === 0) {
+    if (prev.root !== EMPTY_ROOT.toString("hex")) fail(`previous head has size 0 but is not the empty-tree root`);
+    console.log(`ok: previous head (the empty tree) is a prefix of the new head (size ${next.size})`);
+    return;
+  }
+  if (prev.size === next.size) {
+    if (prev.root !== next.root) fail(`previous and new heads both have size ${next.size} but different roots: the log was rewritten`);
+    console.log(`ok: previous head (size ${prev.size}, same root) is a prefix of the new head (size ${next.size})`);
+    return;
+  }
+
   const direct = await fetchConsistency(baseUrl, prev.size, next.size);
   if (direct.status === 200) {
     const head = checkConsistencyResponse(prev, direct.body, keys, `consistency ${prev.size} -> ${next.size}`);
