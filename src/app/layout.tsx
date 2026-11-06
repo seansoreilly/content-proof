@@ -67,6 +67,9 @@ export default function RootLayout({
             <Link href="/privacy" className="-my-2 py-3 hover:text-ink">
               Privacy
             </Link>
+            <Link href="/account" className="-my-2 py-3 hover:text-ink">
+              Account
+            </Link>
           </nav>
         </header>
         <AuthProvider>

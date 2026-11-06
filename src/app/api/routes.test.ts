@@ -5,6 +5,7 @@ import { buildSignedMessage, decodeRecord, encodeRecord, hashHexToB64url, type S
 import { base64ToBytes, bytesToHex, toBase64Url } from "@/lib/base64";
 import { createMemoryStore } from "@/lib/rate-limit";
 import { createMemoryLogStore } from "@/lib/log-store";
+import { createMemoryRecordStore, type ListByEmailOptions } from "@/lib/record-store";
 import { recordLeafHash, verifyInclusionProof, verifyLogHead, verifyRecordInclusion, type InclusionProofResponse, type SignedLogHead } from "@/lib/log-verify";
 import { parsePublicKeysJson } from "@/lib/keyset";
 import { createVerificationUrl } from "@/lib/record";
@@ -18,6 +19,8 @@ vi.mock("next-auth", () => ({
 
 // Shared in-memory stores so the sign route and the lookup route see the same data.
 const records = new Map<string, SignatureRecord>();
+// A real memory store alongside the map, so the account listing sees the same writes.
+let recordStore = createMemoryRecordStore();
 let log = createMemoryLogStore();
 let recordPutError: Error | null = null;
 vi.mock("@/lib/redis", () => ({
@@ -26,8 +29,10 @@ vi.mock("@/lib/redis", () => ({
     put: async (r: SignatureRecord) => {
       if (recordPutError) throw recordPutError;
       records.set(r.s, r);
+      await recordStore.put(r);
     },
     get: async (s: string) => records.get(s) ?? null,
+    listByEmail: (email: string, options: ListByEmailOptions) => recordStore.listByEmail(email, options),
   }),
   getLogStore: () => log,
 }));
@@ -41,7 +46,8 @@ async function routes() {
   const logHead = await import("@/app/api/log/head/route");
   const logEntries = await import("@/app/api/log/entries/route");
   const logProof = await import("@/app/api/log/proof/route");
-  return { sign, verify, wellKnown, lookup, logHead, logEntries, logProof };
+  const accountRecords = await import("@/app/api/account/records/route");
+  return { sign, verify, wellKnown, lookup, logHead, logEntries, logProof, accountRecords };
 }
 
 describe("API routes", () => {
@@ -49,6 +55,7 @@ describe("API routes", () => {
 
   beforeEach(() => {
     records.clear();
+    recordStore = createMemoryRecordStore();
     log = createMemoryLogStore();
     recordPutError = null;
     session.user = { email: "signer@gmail.com" };
@@ -379,6 +386,58 @@ describe("API routes", () => {
       params: Promise.resolve({ signature: "A".repeat(86) }),
     });
     expect(missing.status).toBe(404);
+  });
+
+  describe("GET /api/account/records", () => {
+    type ListBody = { records: Array<{ record: SignatureRecord; logIndex?: number }>; nextCursor: string | null };
+    const list = async (
+      accountRecords: { GET: (r: Request) => Promise<Response> },
+      qs = ""
+    ): Promise<Response> => accountRecords.GET(new Request(`http://t/api/account/records${qs}`));
+
+    it("requires a session and is not CORS-enabled", async () => {
+      const { accountRecords } = await routes();
+      session.user = null;
+      const res = await list(accountRecords);
+      expect(res.status).toBe(401);
+      expect(res.headers.get("access-control-allow-origin")).toBeNull();
+      expect("OPTIONS" in accountRecords).toBe(false);
+    });
+
+    it("lists only the session account's records, newest first, with log indexes and a cursor", async () => {
+      const { sign, accountRecords } = await routes();
+      const mine: SignatureRecord[] = [];
+      for (let i = 0; i < 3; i++) {
+        const res = await sign.POST(jsonRequest("http://t/api/sign", { fileHash: sha256Hex(`mine ${i}`) }));
+        mine.push(((await res.json()) as { record: SignatureRecord }).record);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+      }
+      session.user = { email: "other@gmail.com" };
+      await sign.POST(jsonRequest("http://t/api/sign", { fileHash: sha256Hex("theirs") }));
+
+      session.user = { email: "Signer@Gmail.com" };
+      const first = await list(accountRecords, "?limit=2");
+      expect(first.status).toBe(200);
+      expect(first.headers.get("access-control-allow-origin")).toBeNull();
+      const page1 = (await first.json()) as ListBody;
+      expect(page1.records).toEqual([
+        { record: mine[2], logIndex: 2 },
+        { record: mine[1], logIndex: 1 },
+      ]);
+      expect(page1.nextCursor).toEqual(expect.any(String));
+
+      const page2 = (await (await list(accountRecords, `?limit=2&cursor=${page1.nextCursor}`)).json()) as ListBody;
+      expect(page2).toEqual({ records: [{ record: mine[0], logIndex: 0 }], nextCursor: null });
+      expect(JSON.stringify([page1, page2])).not.toContain("other@gmail.com");
+    });
+
+    it("rejects a bad limit or cursor", async () => {
+      const { accountRecords } = await routes();
+      for (const bad of ["?limit=0", "?limit=", "?limit=1.5", "?cursor=nope"]) {
+        expect((await list(accountRecords, bad)).status, bad).toBe(400);
+      }
+      expect(((await (await list(accountRecords, "?limit=9999")).json()) as ListBody).records).toEqual([]);
+    });
   });
 });
 
