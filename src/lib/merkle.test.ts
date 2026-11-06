@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { bytesToHex } from "@/lib/base64";
-import { computeRoot, inclusionProof, leafHash, verifyInclusion } from "@/lib/merkle";
+import { MerkleTree, computeRoot, inclusionProof, leafHash, verifyInclusion } from "@/lib/merkle";
 
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
 
@@ -39,5 +40,81 @@ describe("RFC 6962 Merkle tree", () => {
         }
       }
     }
+  });
+});
+
+/**
+ * The recursive implementation as it was before the incremental tree, kept
+ * verbatim as the reference the new one must match byte for byte.
+ */
+const reference = (() => {
+  const sha = (data: Uint8Array): Uint8Array => new Uint8Array(createHash("sha256").update(data).digest());
+  const nodeHash = (l: Uint8Array, r: Uint8Array): Uint8Array => sha(Uint8Array.from([0x01, ...l, ...r]));
+  const split = (n: number): number => {
+    let k = 1;
+    while (k * 2 < n) k *= 2;
+    return k;
+  };
+  const computeRoot = (leaves: Uint8Array[]): Uint8Array => {
+    if (leaves.length === 0) return sha(new Uint8Array(0));
+    if (leaves.length === 1) return leaves[0];
+    const k = split(leaves.length);
+    return nodeHash(computeRoot(leaves.slice(0, k)), computeRoot(leaves.slice(k)));
+  };
+  const inclusionProof = (leaves: Uint8Array[], index: number): Uint8Array[] => {
+    if (index < 0 || index >= leaves.length) throw new RangeError("leaf index out of range");
+    if (leaves.length === 1) return [];
+    const k = split(leaves.length);
+    if (index < k) return [...inclusionProof(leaves.slice(0, k), index), computeRoot(leaves.slice(k))];
+    return [...inclusionProof(leaves.slice(k), index - k), computeRoot(leaves.slice(0, k))];
+  };
+  return { computeRoot, inclusionProof };
+})();
+
+const hexes = (hashes: Uint8Array[]): string[] => hashes.map(bytesToHex);
+
+describe("incremental Merkle tree", () => {
+  const all = Array.from({ length: 70 }, (_, i) => leafHash(utf8(`leaf-${i}`)));
+
+  it("matches the recursive reference root and every audit path for sizes 0 to 70", () => {
+    for (let size = 0; size <= 70; size++) {
+      const leaves = all.slice(0, size);
+      expect(bytesToHex(computeRoot(leaves))).toBe(bytesToHex(reference.computeRoot(leaves)));
+      for (let i = 0; i < size; i++) {
+        expect(hexes(inclusionProof(leaves, i))).toEqual(hexes(reference.inclusionProof(leaves, i)));
+      }
+      expect(() => inclusionProof(leaves, size)).toThrow(RangeError);
+      expect(() => inclusionProof(leaves, -1)).toThrow(RangeError);
+    }
+  });
+
+  it("answers for every earlier size from one tree grown leaf by leaf", () => {
+    const tree = new MerkleTree();
+    for (const leaf of all) tree.append(leaf);
+    expect(tree.size).toBe(70);
+    for (let size = 0; size <= 70; size++) {
+      const leaves = all.slice(0, size);
+      expect(bytesToHex(tree.root(size))).toBe(bytesToHex(reference.computeRoot(leaves)));
+      for (let i = 0; i < size; i++) {
+        expect(hexes(tree.inclusionProof(i, size))).toEqual(hexes(reference.inclusionProof(leaves, i)));
+      }
+    }
+    expect(bytesToHex(tree.leaf(69))).toBe(bytesToHex(all[69]));
+    expect(() => tree.root(71)).toThrow(RangeError);
+    expect(() => tree.leaf(70)).toThrow(RangeError);
+    expect(() => tree.inclusionProof(5, 5)).toThrow(RangeError);
+  });
+
+  it("hands out copies, so callers cannot corrupt the cached nodes", () => {
+    const tree = MerkleTree.from(all.slice(0, 8));
+    const before = bytesToHex(tree.root());
+    tree.root().fill(0);
+    tree.leaf(0).fill(0);
+    tree.inclusionProof(3)[0].fill(0);
+    expect(bytesToHex(tree.root())).toBe(before);
+  });
+
+  it("refuses leaves that are not 32-byte hashes", () => {
+    expect(() => new MerkleTree().append(new Uint8Array(31))).toThrow(RangeError);
   });
 });

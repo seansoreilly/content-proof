@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeKeyPair, stubServerKeys } from "@/test/fixtures";
-import { createMemoryLogStore } from "@/lib/log-store";
-import { leafHash, verifyInclusion } from "@/lib/merkle";
+import { createMemoryLogStore, type LogStore } from "@/lib/log-store";
+import { computeRoot, leafHash, verifyInclusion } from "@/lib/merkle";
 import { encodeRecord, type SignatureRecord } from "@/lib/record";
 import { keyIdFromSpkiBase64, type PublicKeysJson } from "@/lib/keyset";
-import { verifyInclusionProof, verifyLogHead } from "@/lib/log-verify";
+import { recordLeafHash, verifyInclusionProof, verifyLogHead } from "@/lib/log-verify";
 import { bytesToHex, hexToBytes } from "@/lib/base64";
 
 function rec(i: number): SignatureRecord {
@@ -87,5 +87,83 @@ describe("signed tree head", () => {
     expect(verifyInclusionProof(rec(3), { ...proof!, root: "0".repeat(64) }, keys)).toBe(false);
     expect(verifyInclusionProof(rec(3), { ...proof!, head: { ...proof!.head, size: 4 } }, keys)).toBe(false);
     expect(verifyInclusionProof(rec(3), { ...proof!, leafHash: "0".repeat(64) }, keys)).toBe(false);
+  });
+});
+
+/** A store whose backing log can be swapped, counting the leaf-hash reads. */
+function swappableLog(initial: LogStore) {
+  const state = { inner: initial, reads: [] as Array<[number, number]> };
+  const log: LogStore = {
+    append: (r) => state.inner.append(r),
+    size: () => state.inner.size(),
+    get: (i) => state.inner.get(i),
+    range: (f, c) => state.inner.range(f, c),
+    indexOf: (s) => state.inner.indexOf(s),
+    leafHashes: (f, c) => {
+      state.reads.push([f, c]);
+      return state.inner.leafHashes(f, c);
+    },
+  };
+  return { log, state };
+}
+
+const rootOf = (records: SignatureRecord[]): string => bytesToHex(computeRoot(records.map(recordLeafHash)));
+
+describe("incremental tree head", () => {
+  beforeEach(() => vi.resetModules());
+
+  it("reads only the leaves appended since the last head", async () => {
+    stubServerKeys();
+    const { buildSignedLogHead, buildInclusionProof } = await import("@/lib/log-head");
+    const { log, state } = swappableLog(createMemoryLogStore());
+    const records = Array.from({ length: 9 }, (_, i) => rec(i));
+
+    for (const r of records.slice(0, 5)) await log.append(r);
+    expect((await buildSignedLogHead(log)).root).toBe(rootOf(records.slice(0, 5)));
+    expect(state.reads).toEqual([[0, 5]]);
+
+    state.reads.length = 0;
+    expect((await buildSignedLogHead(log)).size).toBe(5);
+    // Just the last cached leaf, to check the log was not replaced.
+    expect(state.reads).toEqual([[4, 1]]);
+
+    for (const r of records.slice(5)) await log.append(r);
+    state.reads.length = 0;
+    const head = await buildSignedLogHead(log);
+    expect(head).toMatchObject({ size: 9, root: rootOf(records) });
+    expect(state.reads).toEqual([[4, 5]]);
+
+    const proof = await buildInclusionProof(log, 7);
+    expect(proof!.root).toBe(head.root);
+    expect(proof!.leafHash).toBe(bytesToHex(recordLeafHash(rec(7))));
+  });
+
+  it("rebuilds when the log underneath was replaced or shrank", async () => {
+    stubServerKeys();
+    const { buildSignedLogHead } = await import("@/lib/log-head");
+    const { log, state } = swappableLog(createMemoryLogStore());
+    for (let i = 0; i < 4; i++) await log.append(rec(i));
+    await buildSignedLogHead(log);
+
+    // Same size, different entries.
+    state.inner = createMemoryLogStore();
+    const other = [10, 11, 12, 13].map(rec);
+    for (const r of other) await log.append(r);
+    expect((await buildSignedLogHead(log)).root).toBe(rootOf(other));
+
+    // Shrank to two entries.
+    state.inner = createMemoryLogStore();
+    for (const r of other.slice(0, 2)) await log.append(r);
+    expect(await buildSignedLogHead(log)).toMatchObject({ size: 2, root: rootOf(other.slice(0, 2)) });
+  });
+
+  it("does not double-append leaves when heads are requested concurrently", async () => {
+    stubServerKeys();
+    const { buildSignedLogHead } = await import("@/lib/log-head");
+    const log = createMemoryLogStore();
+    const records = Array.from({ length: 6 }, (_, i) => rec(i));
+    for (const r of records) await log.append(r);
+    const heads = await Promise.all(Array.from({ length: 5 }, () => buildSignedLogHead(log)));
+    for (const head of heads) expect(head).toMatchObject({ size: 6, root: rootOf(records) });
   });
 });
