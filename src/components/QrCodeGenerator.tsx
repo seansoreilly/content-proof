@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { generateQrCodeDataUrl } from "@/lib/qr";
 import { createVerificationUrl, encodeRecord, type SignatureRecord } from "@/lib/record";
 import { composeSealPng, rimTextFor } from "@/lib/seal-image";
@@ -35,6 +35,7 @@ export const QrCodeGenerator: React.FC<Props> = ({ record, size = 288 }) => {
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [copied, setCopied] = useState<CopyTarget | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const encodedRecord = encodeRecord(record);
   const rimText = rimTextFor(record);
@@ -60,14 +61,33 @@ export const QrCodeGenerator: React.FC<Props> = ({ record, size = 288 }) => {
     };
   }, [encodedRecord, size]);
 
+  const mounted = useRef(true);
+
+  // Clear the "Copied" reset timer on unmount so it never fires on a dead
+  // component, and note the unmount so a clipboard write still in flight does
+  // not start a new timer afterwards.
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (copiedTimer.current !== null) clearTimeout(copiedTimer.current);
+    };
+  }, []);
+
   const copy = async (target: CopyTarget): Promise<void> => {
     const text = target === "link" ? verificationUrl : encodedRecord;
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
       track("copy_record", { target });
+      if (!mounted.current) return;
       setCopied(target);
-      setTimeout(() => setCopied(null), 2000);
+      // Restart the timer so a second copy keeps its full two seconds.
+      if (copiedTimer.current !== null) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => {
+        copiedTimer.current = null;
+        setCopied(null);
+      }, 2000);
     } catch (err) {
       console.error("Failed to copy:", err);
     }

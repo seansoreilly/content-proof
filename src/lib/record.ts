@@ -195,10 +195,12 @@ const FRAGMENT_PARAM = "P";
  * the payload never lands in request logs.
  */
 export function createVerificationUrl(encodedRecord: string, baseUrl?: string): string {
+  // An empty or blank NEXT_PUBLIC_VERIFY_BASE_URL (as .env.example ships it)
+  // counts as unset, so QR codes never carry a relative link.
   const base =
     baseUrl ??
-    process.env.NEXT_PUBLIC_VERIFY_BASE_URL ??
-    (typeof window !== "undefined" ? window.location.origin : "");
+    (process.env.NEXT_PUBLIC_VERIFY_BASE_URL?.trim() ||
+      (typeof window !== "undefined" ? window.location.origin : ""));
   return `${base.replace(/\/$/, "")}/verify#${FRAGMENT_PARAM}=${encodedRecord}`;
 }
 

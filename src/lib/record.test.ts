@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   RECORD_VERSION,
   buildSignedMessage,
@@ -66,6 +66,30 @@ describe("record codec", () => {
     expect(extractPayloadFromUrl(url)).toBe(encoded);
     expect(extractPayloadFromUrl(`#P=${encoded}`)).toBe(encoded);
     expect(extractPayloadFromUrl("https://contentproof.app/verify")).toBeNull();
+  });
+
+  describe("base URL from NEXT_PUBLIC_VERIFY_BASE_URL", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    });
+
+    it("treats an empty or blank value as unset and falls back to the page origin", () => {
+      vi.stubGlobal("window", { location: { origin: "https://www.contentproof.app" } });
+      const encoded = encodeRecord(sample);
+      for (const value of ["", "   "]) {
+        vi.stubEnv("NEXT_PUBLIC_VERIFY_BASE_URL", value);
+        expect(createVerificationUrl(encoded)).toBe(
+          `https://www.contentproof.app/verify#P=${encoded}`,
+        );
+      }
+    });
+
+    it("uses a configured value, trimmed and without a trailing slash", () => {
+      vi.stubEnv("NEXT_PUBLIC_VERIFY_BASE_URL", " https://verify.example/ ");
+      const encoded = encodeRecord(sample);
+      expect(createVerificationUrl(encoded)).toBe(`https://verify.example/verify#P=${encoded}`);
+    });
   });
 
   it("keeps the QR link under the scannability budget for a 30-char email", () => {
