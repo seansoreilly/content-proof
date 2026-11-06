@@ -3,13 +3,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { QrCodeGenerator } from "@/components/QrCodeGenerator";
-import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_LABEL, sha256Hash } from "@/lib/hash";
-import { buildSignedMessage, parseRecordObject, type SignatureRecord } from "@/lib/record";
+import { isAbortError, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_LABEL, sha256Hash } from "@/lib/hash";
+import { buildSignedMessage, type SignatureRecord } from "@/lib/record";
 import { getOrCreateUserKey, type UserSigningKey } from "@/lib/user-keys";
 import { track, type SignFailureType } from "@/lib/analytics";
 import { Eyebrow } from "@/components/ui";
 import { SignInButton } from "@/components/SignInButton";
 import { DropSeal } from "@/components/DropSeal";
+import { HashProgress } from "@/components/upload/HashProgress";
+import { interpretSignResponse } from "@/components/upload/sign-response";
 
 interface HashResult {
   fileName: string;
@@ -48,11 +50,16 @@ export default function FileUpload({ email }: FileUploadProps): React.JSX.Elemen
   const [needsSignIn, setNeedsSignIn] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [stage, setStage] = useState<"idle" | "hashing" | "signing">("idle");
+  const [progress, setProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [record, setRecord] = useState<SignatureRecord | null>(null);
   const [userKey, setUserKey] = useState<UserSigningKey | null | "unsupported">(null);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // The run in flight, so Cancel (and unmounting) can stop reading the file and
+  // drop the signing request.
+  const inFlight = useRef<AbortController | null>(null);
+  useEffect(() => () => inFlight.current?.abort(), []);
 
   // This browser's own signing key (created on first use, never leaves the device).
   // The promise is kept so a file dropped before the key resolves still waits
@@ -82,6 +89,14 @@ export default function FileUpload({ email }: FileUploadProps): React.JSX.Elemen
     setRecord(null);
   };
 
+  const cancel = () => {
+    inFlight.current?.abort();
+    inFlight.current = null;
+    // Cancelling is the person's choice, not a failure: back to idle, no error.
+    resetState();
+    setStage("idle");
+  };
+
   // Any file type is fine: only its hash leaves the browser. The size cap is a
   // sanity bound, not a memory limit, because hashing is streamed.
   const validateFile = (file: File): { message: string; errorType: SignFailureType } | null => {
@@ -97,6 +112,10 @@ export default function FileUpload({ email }: FileUploadProps): React.JSX.Elemen
 
   const handleFiles = async (files: FileList | null, source: "drop" | "picker") => {
     if (!files || files.length === 0) return;
+    inFlight.current?.abort();
+    const controller = new AbortController();
+    inFlight.current = controller;
+    const { signal } = controller;
     resetState();
 
     const file = files[0];
@@ -115,8 +134,15 @@ export default function FileUpload({ email }: FileUploadProps): React.JSX.Elemen
     }
 
     try {
+      setProgress({ done: 0, total: file.size });
       setStage("hashing");
-      const hash = await sha256Hash(file);
+      const hash = await sha256Hash(file, {
+        signal,
+        onProgress: (done, total) => {
+          if (!signal.aborted) setProgress({ done, total });
+        },
+      });
+      if (signal.aborted) return;
       setHashResult({ fileName: file.name, fileSize: file.size, hash });
 
       setStage("signing");
@@ -134,28 +160,30 @@ export default function FileUpload({ email }: FileUploadProps): React.JSX.Elemen
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal,
       });
+      // A non-JSON error page still has a status worth reporting.
+      const body: unknown = await res.json().catch(() => null);
+      if (signal.aborted) return;
 
-      if (res.status === 401) {
-        setNeedsSignIn(true);
-        throw new SignError("Please sign in before signing a file.", "unauthorized");
+      const outcome = interpretSignResponse(res.status, body);
+      if (!outcome.ok) {
+        if (outcome.needsSignIn) setNeedsSignIn(true);
+        throw new SignError(outcome.message, outcome.errorType);
       }
-      if (res.status === 429) {
-        throw new SignError("Too many signing requests. Please wait a minute and try again.", "rate_limited");
-      }
-      if (!res.ok) throw new SignError(`Signing failed (${res.status}).`, "server_error");
-
-      const body = (await res.json()) as { record?: unknown };
-      const signed = parseRecordObject(body.record);
-      if (!signed) throw new SignError("The server returned an unexpected response.", "invalid_response");
-      setRecord(signed);
+      setRecord(outcome.record);
       track("sign_file", { key_type: key === "unsupported" ? "service_only" : "user_key", is_image: isImage });
     } catch (err) {
+      // Cancel already returned to idle; an abort is not a failure to report.
+      if (isAbortError(err) || signal.aborted) return;
       console.error("File signing failed:", err);
       track("sign_file_failed", { error_type: err instanceof SignError ? err.errorType : "unknown" });
       setError(err instanceof Error ? err.message : "Failed to generate signature.");
     } finally {
-      setStage("idle");
+      if (inFlight.current === controller) {
+        inFlight.current = null;
+        setStage("idle");
+      }
     }
   };
 
@@ -234,7 +262,7 @@ export default function FileUpload({ email }: FileUploadProps): React.JSX.Elemen
             {busy ? `${stageLabel}…` : dragActive ? "Release to sign" : "Drop a file to sign it"}
           </p>
           {busy ? (
-            <p className="text-mute" role="status">
+            <p className="text-mute" role={stage === "signing" ? "status" : undefined}>
               {stage === "hashing"
                 ? "Reading the file in this browser."
                 : "Sending the fingerprint for countersignature."}
@@ -252,6 +280,10 @@ export default function FileUpload({ email }: FileUploadProps): React.JSX.Elemen
           </p>
         </div>
       </div>
+
+      {busy && (
+        <HashProgress done={stage === "hashing" ? progress.done : null} total={progress.total} onCancel={cancel} />
+      )}
 
       {note && <p className="text-sm text-mute">{note}</p>}
 
