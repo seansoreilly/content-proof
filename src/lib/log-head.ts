@@ -3,7 +3,12 @@ import { bytesToHex } from "@/lib/base64";
 import { getSigningKeyPair } from "@/lib/keys";
 import type { LogStore } from "@/lib/log-store";
 import { MerkleTree } from "@/lib/merkle";
-import { logHeadMessage, type InclusionProofResponse, type SignedLogHead } from "@/lib/log-verify";
+import {
+  logHeadMessage,
+  type ConsistencyProofResponse,
+  type InclusionProofResponse,
+  type SignedLogHead,
+} from "@/lib/log-verify";
 
 /**
  * Server-side production of signed tree heads and inclusion proofs.
@@ -96,5 +101,32 @@ export async function buildInclusionProof(log: LogStore, index: number): Promise
     leafHash: bytesToHex(tree.leaf(index)),
     proof: tree.inclusionProof(index, size).map(bytesToHex),
     head,
+  };
+}
+
+export type ConsistencyProofResult =
+  | { ok: true; response: ConsistencyProofResponse }
+  | { ok: false; error: string; size: number };
+
+/**
+ * Consistency proof from tree size `from` to the current size, with a signed
+ * head for the current size. Only the current tree can be proven to: the
+ * service signs heads as of now, and a proof to an older size would need a
+ * head it never signed. `to`, when given, must therefore equal the size.
+ */
+export async function buildConsistencyProof(
+  log: LogStore,
+  from: number,
+  to?: number
+): Promise<ConsistencyProofResult> {
+  const { tree, size } = await syncLogTree(log);
+  if (to !== undefined && to !== size) {
+    return { ok: false, error: `to must be the current log size (${size})`, size };
+  }
+  if (from > size) return { ok: false, error: `from must not exceed the current log size (${size})`, size };
+  const head = signLogHead(tree, size, Date.now());
+  return {
+    ok: true,
+    response: { from, to: size, proof: tree.consistencyProof(from, size).map(bytesToHex), head },
   };
 }

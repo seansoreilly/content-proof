@@ -200,8 +200,23 @@ built over it and the service signs the tree head with its current key.
   root). `head` is a signed tree head over exactly that tree, so a proof
   verifies on its own: walk the path to `root`, then check `head.signature`
   and that `head.size` and `head.root` match.
+- `GET /api/log/consistency?from=M` (optionally `&to=N`) → an RFC 6962
+  consistency proof `{from, to, proof[], head}` that the tree of size `M`
+  (say, a head you archived last month) is a prefix of the current tree.
+  `head` is a freshly signed head for size `to`. The service only signs the
+  current tree, so `to` defaults to the current size and any other value is
+  answered with 400 and `{error, size}`. The proof is empty when `M` is 0 or
+  equals `to`. Check it with `verifyConsistencyResponse(oldHead, response,
+  keys)` from `src/lib/log-verify.ts` (RFC 9162 §2.1.4.2), which also checks
+  both head signatures.
 
-All three are rate limited per client IP and answer with permissive CORS.
+All four are rate limited per client IP and answer with permissive CORS.
+
+The server keeps each entry's leaf hash in a parallel Redis list
+(`log:leaves`) written in the same script as the entry, and an incremental
+tree in memory, so a head or proof reads only the leaves appended since the
+last request rather than the whole log. Logs written before the leaf list
+existed are backfilled from the records on first read.
 
 What this gives you: the service cannot quietly remove, alter or back-date a
 record once a tree head covering it has been seen by anyone. The verify page

@@ -57,7 +57,7 @@ function isTreeSize(n: number): boolean {
  * doubles). Those subtrees never change once
  * complete, and the RFC's recursive split always puts one on the left, so a
  * root or audit path for any tree size up to `size` needs O(log n) hashes
- * (O(log² n) for an audit path) instead of a pass over every leaf. Appending a leaf
+ * (O(log² n) for proofs) instead of a pass over every leaf. Appending a leaf
  * costs at most log n hashes.
  */
 export class MerkleTree {
@@ -106,6 +106,14 @@ export class MerkleTree {
     return this.path(index, 0, size).map((h) => h.slice());
   }
 
+  /** PROOF(m, D[0:n]) (RFC 6962 §2.1.2): empty when m is 0 or m equals n. */
+  consistencyProof(m: number, n: number = this.size): Uint8Array[] {
+    this.checkSize(n);
+    if (!isTreeSize(m) || m > n) throw new RangeError("old tree size out of range");
+    if (m === 0 || m === n) return [];
+    return this.subproof(m, 0, n, true).map((h) => h.slice());
+  }
+
   private checkSize(size: number): void {
     if (!isTreeSize(size) || size > this.size) throw new RangeError("tree size out of range");
   }
@@ -145,6 +153,14 @@ export class MerkleTree {
     return [...this.path(index, start + k, end), this.rangeRoot(start, start + k)];
   }
 
+  /** SUBPROOF(m, D[start:end], b) with m relative to `start`. */
+  private subproof(m: number, start: number, end: number, complete: boolean): Uint8Array[] {
+    const n = end - start;
+    if (m === n) return complete ? [] : [this.rangeRoot(start, end)];
+    const k = split(n);
+    if (m <= k) return [...this.subproof(m, start, start + k, complete), this.rangeRoot(start + k, end)];
+    return [...this.subproof(m - k, start + k, end, false), this.rangeRoot(start, start + k)];
+  }
 }
 
 /** Merkle tree hash of the given leaf hashes (MTH in RFC 6962 §2.1). */
@@ -156,6 +172,17 @@ export function computeRoot(leaves: Uint8Array[]): Uint8Array {
 export function inclusionProof(leaves: Uint8Array[], index: number): Uint8Array[] {
   if (!Number.isInteger(index) || index < 0 || index >= leaves.length) throw new RangeError("leaf index out of range");
   return MerkleTree.from(leaves).inclusionProof(index);
+}
+
+/**
+ * Consistency proof that the tree over the first `m` leaves is a prefix of the
+ * tree over the first `n` (PROOF in RFC 6962 §2.1.2). Empty when m is 0 or
+ * equal to n, where there is nothing to prove.
+ */
+export function consistencyProof(leaves: Uint8Array[], m: number, n: number): Uint8Array[] {
+  if (!isTreeSize(n) || n > leaves.length) throw new RangeError("tree size out of range");
+  if (!isTreeSize(m) || m > n) throw new RangeError("old tree size out of range");
+  return MerkleTree.from(leaves.slice(0, n)).consistencyProof(m, n);
 }
 
 function equal(a: Uint8Array, b: Uint8Array): boolean {
@@ -194,4 +221,53 @@ export function verifyInclusion(
     sn >>= 1;
   }
   return sn === 0 && equal(r, root);
+}
+
+/**
+ * Verify that the tree of size `m` with root `oldRoot` is a prefix of the tree
+ * of size `n` with root `newRoot` (RFC 9162 §2.1.4.2). Equal sizes need an
+ * empty proof and equal roots; size 0 is a prefix of every tree, but its root
+ * must still be the empty-tree hash. Never throws.
+ */
+export function verifyConsistency(
+  m: number,
+  n: number,
+  oldRoot: Uint8Array,
+  newRoot: Uint8Array,
+  proof: Uint8Array[]
+): boolean {
+  if (!isTreeSize(m) || !isTreeSize(n) || m > n) return false;
+  if (m === n) return proof.length === 0 && equal(oldRoot, newRoot);
+  if (m === 0) return proof.length === 0 && equal(oldRoot, sha256(new Uint8Array(0)));
+  if (proof.length === 0) return false;
+
+  // When m is a power of two the old root is itself a node of the new tree,
+  // so the proof omits it and the verifier starts from it.
+  const path = isPowerOfTwo(m) ? [oldRoot, ...proof] : proof;
+  let fn = m - 1;
+  let sn = n - 1;
+  while ((fn & 1) === 1) {
+    fn >>= 1;
+    sn >>= 1;
+  }
+  let fr = path[0];
+  let sr = path[0];
+  for (const c of path.slice(1)) {
+    if (sn === 0) return false;
+    if ((fn & 1) === 1 || fn === sn) {
+      fr = nodeHash(c, fr);
+      sr = nodeHash(c, sr);
+      if ((fn & 1) === 0) {
+        while (!((fn & 1) === 1 || fn === 0)) {
+          fn >>= 1;
+          sn >>= 1;
+        }
+      }
+    } else {
+      sr = nodeHash(sr, c);
+    }
+    fn >>= 1;
+    sn >>= 1;
+  }
+  return sn === 0 && equal(fr, oldRoot) && equal(sr, newRoot);
 }

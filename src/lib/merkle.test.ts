@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { bytesToHex } from "@/lib/base64";
-import { MerkleTree, computeRoot, inclusionProof, leafHash, verifyInclusion } from "@/lib/merkle";
+import { MerkleTree, computeRoot, consistencyProof, inclusionProof, leafHash, verifyConsistency, verifyInclusion } from "@/lib/merkle";
 
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
 
@@ -116,5 +116,73 @@ describe("incremental Merkle tree", () => {
 
   it("refuses leaves that are not 32-byte hashes", () => {
     expect(() => new MerkleTree().append(new Uint8Array(31))).toThrow(RangeError);
+  });
+});
+
+describe("RFC 6962 consistency proofs", () => {
+  const all = Array.from({ length: 40 }, (_, i) => leafHash(utf8(`leaf-${i}`)));
+  const tree = MerkleTree.from(all);
+  const empty = computeRoot([]);
+
+  it("verifies for every 0 <= m <= n <= 40 and matches the pure function", () => {
+    for (let n = 0; n <= 40; n++) {
+      const newRoot = tree.root(n);
+      for (let m = 0; m <= n; m++) {
+        const oldRoot = tree.root(m);
+        const proof = consistencyProof(all, m, n);
+        expect(hexes(proof)).toEqual(hexes(tree.consistencyProof(m, n)));
+        if (m === 0 || m === n) expect(proof).toEqual([]);
+        expect(verifyConsistency(m, n, oldRoot, newRoot, proof), `${m}->${n}`).toBe(true);
+      }
+    }
+  });
+
+  it("rejects tampered proofs, roots and sizes", () => {
+    for (let n = 2; n <= 40; n++) {
+      const newRoot = tree.root(n);
+      for (let m = 1; m < n; m++) {
+        const oldRoot = tree.root(m);
+        const proof = tree.consistencyProof(m, n);
+        const label = `${m}->${n}`;
+        expect(proof.length, label).toBeGreaterThan(0);
+        for (let i = 0; i < proof.length; i++) {
+          const flipped = proof.map((p) => p.slice());
+          flipped[i][0] ^= 1;
+          expect(verifyConsistency(m, n, oldRoot, newRoot, flipped), label).toBe(false);
+        }
+        expect(verifyConsistency(m, n, oldRoot, newRoot, proof.slice(1)), label).toBe(false);
+        expect(verifyConsistency(m, n, oldRoot, newRoot, proof.slice(0, -1)), label).toBe(false);
+        expect(verifyConsistency(m, n, oldRoot, newRoot, [...proof, newRoot]), label).toBe(false);
+        expect(verifyConsistency(m, n, newRoot, oldRoot, proof), label).toBe(false);
+        expect(verifyConsistency(m, n, tree.root(m - 1), newRoot, proof), label).toBe(false);
+        expect(verifyConsistency(m, n, oldRoot, tree.root(n - 1), proof), label).toBe(false);
+        const wrongM = m + 1 < n ? m + 1 : m - 1;
+        expect(verifyConsistency(wrongM, n, oldRoot, newRoot, proof), label).toBe(false);
+        expect(verifyConsistency(n, m, newRoot, oldRoot, proof), label).toBe(false);
+      }
+    }
+  });
+
+  it("treats equal sizes and the empty tree as trivially consistent, and nothing else", () => {
+    const root5 = tree.root(5);
+    expect(verifyConsistency(5, 5, root5, root5, [])).toBe(true);
+    expect(verifyConsistency(5, 5, root5, tree.root(6), [])).toBe(false);
+    expect(verifyConsistency(5, 5, root5, root5, [root5])).toBe(false);
+    expect(verifyConsistency(0, 7, empty, tree.root(7), [])).toBe(true);
+    expect(verifyConsistency(0, 0, empty, empty, [])).toBe(true);
+    expect(verifyConsistency(0, 7, root5, tree.root(7), [])).toBe(false);
+    expect(verifyConsistency(0, 7, empty, tree.root(7), [root5])).toBe(false);
+    expect(verifyConsistency(3, 7, tree.root(3), tree.root(7), [])).toBe(false);
+  });
+
+  it("rejects invalid sizes instead of throwing", () => {
+    const r = tree.root(4);
+    for (const [m, n] of [[5, 4], [-1, 4], [1.5, 4], [1, Number.NaN], [1, 2 ** 40]]) {
+      expect(verifyConsistency(m, n, r, r, [r])).toBe(false);
+    }
+    expect(() => consistencyProof(all, 5, 4)).toThrow(RangeError);
+    expect(() => consistencyProof(all, -1, 4)).toThrow(RangeError);
+    expect(() => consistencyProof(all, 1, 41)).toThrow(RangeError);
+    expect(() => tree.consistencyProof(2, 41)).toThrow(RangeError);
   });
 });
