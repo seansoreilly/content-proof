@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
 import { InvalidUserSignatureError, signFileHash } from "@/lib/crypto/ed25519";
+import { jsonRequestHeadersError, readJsonBody } from "@/lib/json-body";
 import { getServiceRawPublicKeys } from "@/lib/keys";
 import { createRateLimiter, rateLimitedResponse } from "@/lib/rate-limit";
 import { getCounterStore, getLogStore, getRecordStore, getUserKeyRegistry } from "@/lib/redis";
@@ -53,17 +54,18 @@ export async function POST(request: Request): Promise<Response> {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Before the limiter: a cross-site form post or an announced oversized
+    // body must not even spend the budget.
+    const headersError = jsonRequestHeadersError(request);
+    if (headersError) return NextResponse.json({ error: headersError.error }, { status: headersError.status });
+
     const decision = await limiter(email.toLowerCase());
     if (!decision.allowed) return rateLimitedResponse(decision, LIMIT);
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-    }
+    const body = await readJsonBody(request);
+    if (!body.ok) return NextResponse.json({ error: body.error }, { status: body.status });
     const now = Date.now();
-    const parsed = parseSignRequest(body, now, isServiceKey);
+    const parsed = parseSignRequest(body.value, now, isServiceKey);
     if (!parsed.ok) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }

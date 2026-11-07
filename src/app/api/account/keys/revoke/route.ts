@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
+import { jsonRequestHeadersError, readJsonBody } from "@/lib/json-body";
 import { isRawPublicKey } from "@/lib/record";
 import { getUserKeyRegistry } from "@/lib/redis";
 
@@ -20,12 +21,11 @@ export async function POST(request: Request): Promise<Response> {
     const email = session?.user?.email;
     if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-    }
+    const headersError = jsonRequestHeadersError(request);
+    if (headersError) return NextResponse.json({ error: headersError.error }, { status: headersError.status });
+    const read = await readJsonBody(request);
+    if (!read.ok) return NextResponse.json({ error: read.error }, { status: read.status });
+    const body = read.value;
     const publicKey = typeof body === "object" && body !== null ? (body as { publicKey?: unknown }).publicKey : undefined;
     if (!isRawPublicKey(publicKey)) {
       return NextResponse.json({ error: "Invalid publicKey" }, { status: 400 });

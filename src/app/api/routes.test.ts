@@ -573,9 +573,12 @@ describe("API routes", () => {
       await signV3(sign, key, "signer@gmail.com");
 
       expect((await revokeKey.POST(revokeRequest("not-a-key"))).status).toBe(400);
-      expect(
-        (await revokeKey.POST(new Request("http://t/api/account/keys/revoke", { method: "POST", body: "{" }))).status
-      ).toBe(400);
+      const badJson = new Request("http://t/api/account/keys/revoke", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{",
+      });
+      expect((await revokeKey.POST(badJson)).status).toBe(400);
       expect((await revokeKey.POST(revokeRequest((await browserKey()).publicKey))).status).toBe(404);
 
       session.user = { email: "mallory@gmail.com" };

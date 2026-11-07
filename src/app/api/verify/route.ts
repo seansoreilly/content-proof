@@ -1,5 +1,6 @@
 import { verifyRecord } from "@/lib/crypto/verify";
 import { buildPublicKeysJson } from "@/lib/keys";
+import { readJsonBody } from "@/lib/json-body";
 import { jsonResponse, publicOptions, publicRoute } from "@/lib/public-route";
 import { hashB64urlToHex, isHashHex, parseRecordObject, type SignatureRecord } from "@/lib/record";
 import { parseRecordInput } from "@/lib/verifier";
@@ -28,12 +29,11 @@ export const POST = publicRoute(
     logTag: "[verify] failed",
   },
   async (request: Request): Promise<Response> => {
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return jsonResponse({ error: "Invalid JSON" }, 400);
-    }
+    // Any content type: this endpoint uses no cookies, and cross-origin
+    // integrators may post text/plain to skip the preflight. Size is capped.
+    const read = await readJsonBody(request);
+    if (!read.ok) return jsonResponse({ error: read.error }, read.status);
+    const body = read.value;
     const fields = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
 
     let record: SignatureRecord;

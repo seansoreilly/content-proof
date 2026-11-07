@@ -35,10 +35,11 @@ export function sha256Hex(data: string | Uint8Array): string {
 }
 
 export function jsonRequest(url: string, body: unknown, init: RequestInit = {}): Request {
+  // `init` first, so extra headers add to the JSON content type instead of replacing it.
   return new Request(url, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...(init.headers ?? {}) },
-    body: JSON.stringify(body),
     ...init,
+    method: init.method ?? "POST",
+    headers: { "content-type": "application/json", ...((init.headers as Record<string, string> | undefined) ?? {}) },
+    body: JSON.stringify(body),
   });
 }
