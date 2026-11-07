@@ -1,0 +1,309 @@
+{
+  "baseUrl": "https://www.contentproof.app",
+  "positive": [
+    {
+      "name": "v2-plain-email",
+      "description": "Version 2 record, plain email",
+      "signedBy": "service",
+      "file": {
+        "utf8": "ContentProof golden fixture: plain v2 record\n",
+        "sha256": "1ae633ea6f0ab748d1c96ee3efb65db55c54e989336da4d85a0006ec82e45c91"
+      },
+      "record": {
+        "v": 2,
+        "k": "gHCAcnlKRXmwM7bQ",
+        "h": "GuYz6m8Kt0jRyW7j77ZdtVxU6YkzbaTYWgAG7ILkXJE",
+        "e": "alice@example.com",
+        "t": 1762473600000,
+        "s": "wIGeZm_vWR37WcU2SjA-1OWIYnEZnZJSL7Jf0ij6gdpKXa4V0SqBnPr4r6kqVw6OxanPnAlA8fjdtHlJVbQfAg"
+      },
+      "wire": "2~gHCAcnlKRXmwM7bQ~GuYz6m8Kt0jRyW7j77ZdtVxU6YkzbaTYWgAG7ILkXJE~alice%40example.com~1762473600000~wIGeZm_vWR37WcU2SjA-1OWIYnEZnZJSL7Jf0ij6gdpKXa4V0SqBnPr4r6kqVw6OxanPnAlA8fjdtHlJVbQfAg",
+      "verificationUrl": "https://www.contentproof.app/verify#P=2~gHCAcnlKRXmwM7bQ~GuYz6m8Kt0jRyW7j77ZdtVxU6YkzbaTYWgAG7ILkXJE~alice%40example.com~1762473600000~wIGeZm_vWR37WcU2SjA-1OWIYnEZnZJSL7Jf0ij6gdpKXa4V0SqBnPr4r6kqVw6OxanPnAlA8fjdtHlJVbQfAg",
+      "messages": {
+        "service": "1ae633ea6f0ab748d1c96ee3efb65db55c54e989336da4d85a0006ec82e45c91:alice@example.com:1762473600000"
+      },
+      "leafHash": "0e1ed66afd7d41bbaca1076e91a2ab33a4470642e85729ca25e9fd91a11c8769",
+      "expected": {
+        "ok": true,
+        "keyId": "gHCAcnlKRXmwM7bQ",
+        "userSigned": false
+      }
+    },
+    {
+      "name": "v2-special-email",
+      "description": "Version 2 record whose email has ~, + and non-ASCII characters (percent-encoded on the wire, ~ as %7E)",
+      "signedBy": "service",
+      "file": {
+        "utf8": "ContentProof golden fixture: special email ~+ ü\n",
+        "sha256": "54db3dc75b5dc4707094f4bc50cc5cd7f3c46ff1f526d7301f46301938f4cb78"
+      },
+      "record": {
+        "v": 2,
+        "k": "gHCAcnlKRXmwM7bQ",
+        "h": "VNs9x1tdxHBwlPS8UMxc1_PEb_H1JtcwH0YwGTj0y3g",
+        "e": "zoë+proof~2026@exämple.org",
+        "t": 1762473600001,
+        "s": "sR7QmXjuxmUcRHcxlX6HQRC2QGcZaY0Q3-CU6UnOKbVmMPb88ReUXyoWOn8VqyYAc4-giRsxB8DbYdnMIdeZDA"
+      },
+      "wire": "2~gHCAcnlKRXmwM7bQ~VNs9x1tdxHBwlPS8UMxc1_PEb_H1JtcwH0YwGTj0y3g~zo%C3%AB%2Bproof%7E2026%40ex%C3%A4mple.org~1762473600001~sR7QmXjuxmUcRHcxlX6HQRC2QGcZaY0Q3-CU6UnOKbVmMPb88ReUXyoWOn8VqyYAc4-giRsxB8DbYdnMIdeZDA",
+      "verificationUrl": "https://www.contentproof.app/verify#P=2~gHCAcnlKRXmwM7bQ~VNs9x1tdxHBwlPS8UMxc1_PEb_H1JtcwH0YwGTj0y3g~zo%C3%AB%2Bproof%7E2026%40ex%C3%A4mple.org~1762473600001~sR7QmXjuxmUcRHcxlX6HQRC2QGcZaY0Q3-CU6UnOKbVmMPb88ReUXyoWOn8VqyYAc4-giRsxB8DbYdnMIdeZDA",
+      "messages": {
+        "service": "54db3dc75b5dc4707094f4bc50cc5cd7f3c46ff1f526d7301f46301938f4cb78:zoë+proof~2026@exämple.org:1762473600001"
+      },
+      "leafHash": "024733b10440af3142cdf95f5bd826a7ee3023f993e12b47a1bc0e5c6ca0cbc3",
+      "expected": {
+        "ok": true,
+        "keyId": "gHCAcnlKRXmwM7bQ",
+        "userSigned": false
+      }
+    },
+    {
+      "name": "v2-min-timestamp",
+      "description": "Version 2 record at the smallest valid timestamp (1)",
+      "signedBy": "service",
+      "file": {
+        "utf8": "ContentProof golden fixture: t = 1\n",
+        "sha256": "798c36ef85cbf38655fef7dc4aa521e21b0330fd191d9574bca02666cdb64c00"
+      },
+      "record": {
+        "v": 2,
+        "k": "gHCAcnlKRXmwM7bQ",
+        "h": "eYw274XL84ZV_vfcSqUh4hsDMP0ZHZV0vKAmZs22TAA",
+        "e": "edge@example.com",
+        "t": 1,
+        "s": "-dH20utkhxnzz1EovGUaleGYtk2NyuBLjmdW1xeOaY1O3GBoLTvRpdaVChDPSTcqHOxKfgebicF0dTq30v9tCQ"
+      },
+      "wire": "2~gHCAcnlKRXmwM7bQ~eYw274XL84ZV_vfcSqUh4hsDMP0ZHZV0vKAmZs22TAA~edge%40example.com~1~-dH20utkhxnzz1EovGUaleGYtk2NyuBLjmdW1xeOaY1O3GBoLTvRpdaVChDPSTcqHOxKfgebicF0dTq30v9tCQ",
+      "verificationUrl": "https://www.contentproof.app/verify#P=2~gHCAcnlKRXmwM7bQ~eYw274XL84ZV_vfcSqUh4hsDMP0ZHZV0vKAmZs22TAA~edge%40example.com~1~-dH20utkhxnzz1EovGUaleGYtk2NyuBLjmdW1xeOaY1O3GBoLTvRpdaVChDPSTcqHOxKfgebicF0dTq30v9tCQ",
+      "messages": {
+        "service": "798c36ef85cbf38655fef7dc4aa521e21b0330fd191d9574bca02666cdb64c00:edge@example.com:1"
+      },
+      "leafHash": "e30a4a0f2c24cf0424a73bd91a9ff676f88cb10554b2aaba525ff36c97b48d1c",
+      "expected": {
+        "ok": true,
+        "keyId": "gHCAcnlKRXmwM7bQ",
+        "userSigned": false
+      }
+    },
+    {
+      "name": "v2-max-timestamp",
+      "description": "Version 2 record at the largest valid 16-digit timestamp (Number.MAX_SAFE_INTEGER)",
+      "signedBy": "service",
+      "file": {
+        "utf8": "ContentProof golden fixture: t = 9007199254740991\n",
+        "sha256": "ed954b0da1ea8bb50f237a5881641ce394b0fd2886df4f4bf5e10b8b4c371ebf"
+      },
+      "record": {
+        "v": 2,
+        "k": "gHCAcnlKRXmwM7bQ",
+        "h": "7ZVLDaHqi7UPI3pYgWQc45Sw_SiG309L9eELi0w3Hr8",
+        "e": "edge@example.com",
+        "t": 9007199254740991,
+        "s": "X_5OhPJHMYhO-vsAmQC-dpWELHZflBZ9vX4qz3m5wQs3UER5NYSjShAZnV4_RMHhN07rU8yLcIxq3a2M7y9FAg"
+      },
+      "wire": "2~gHCAcnlKRXmwM7bQ~7ZVLDaHqi7UPI3pYgWQc45Sw_SiG309L9eELi0w3Hr8~edge%40example.com~9007199254740991~X_5OhPJHMYhO-vsAmQC-dpWELHZflBZ9vX4qz3m5wQs3UER5NYSjShAZnV4_RMHhN07rU8yLcIxq3a2M7y9FAg",
+      "verificationUrl": "https://www.contentproof.app/verify#P=2~gHCAcnlKRXmwM7bQ~7ZVLDaHqi7UPI3pYgWQc45Sw_SiG309L9eELi0w3Hr8~edge%40example.com~9007199254740991~X_5OhPJHMYhO-vsAmQC-dpWELHZflBZ9vX4qz3m5wQs3UER5NYSjShAZnV4_RMHhN07rU8yLcIxq3a2M7y9FAg",
+      "messages": {
+        "service": "ed954b0da1ea8bb50f237a5881641ce394b0fd2886df4f4bf5e10b8b4c371ebf:edge@example.com:9007199254740991"
+      },
+      "leafHash": "58cda63d89e0ee47e714b47cd71496fe765fd5dc47d665f27f24f3742f3d8d3f",
+      "expected": {
+        "ok": true,
+        "keyId": "gHCAcnlKRXmwM7bQ",
+        "userSigned": false
+      }
+    },
+    {
+      "name": "v3-user-signed",
+      "description": "Version 3 record signed by the account holder's browser key and countersigned by the service",
+      "signedBy": "service+user",
+      "file": {
+        "utf8": "ContentProof golden fixture: v3 user-signed record\n",
+        "sha256": "03a6ada6e09f375d634d595650e7aaf9213dfef7e27c2a8bb4a20a730d44c42d"
+      },
+      "record": {
+        "v": 3,
+        "k": "gHCAcnlKRXmwM7bQ",
+        "h": "A6atpuCfN11jTVlWUOeq-SE9_vfifCqLtKIKcw1ExC0",
+        "e": "bob@example.com",
+        "t": 1762473600002,
+        "s": "x5tklwJItv_w7Kc56cPR2HCEiftC7oOAUYg7xY3NO3XboF4SAajhrlb6WrNyThaDQ6Eg_S749feXeR8nfkGxAw",
+        "u": "kkQhZMNhdQPc6TO60ZmyCTrXBYsM7FXg_GhDTYcG2fM",
+        "us": "1fAXgdeZP_rV1OWot4mKGc3sIPOH1oFGTH-zp6Z3fCa6Yq0hoOh5zgUTXb8KvPBe3bYmk9R5uohR-m-BwQq7AQ"
+      },
+      "wire": "3~gHCAcnlKRXmwM7bQ~A6atpuCfN11jTVlWUOeq-SE9_vfifCqLtKIKcw1ExC0~bob%40example.com~1762473600002~x5tklwJItv_w7Kc56cPR2HCEiftC7oOAUYg7xY3NO3XboF4SAajhrlb6WrNyThaDQ6Eg_S749feXeR8nfkGxAw~kkQhZMNhdQPc6TO60ZmyCTrXBYsM7FXg_GhDTYcG2fM~1fAXgdeZP_rV1OWot4mKGc3sIPOH1oFGTH-zp6Z3fCa6Yq0hoOh5zgUTXb8KvPBe3bYmk9R5uohR-m-BwQq7AQ",
+      "verificationUrl": "https://www.contentproof.app/verify#P=3~gHCAcnlKRXmwM7bQ~A6atpuCfN11jTVlWUOeq-SE9_vfifCqLtKIKcw1ExC0~bob%40example.com~1762473600002~x5tklwJItv_w7Kc56cPR2HCEiftC7oOAUYg7xY3NO3XboF4SAajhrlb6WrNyThaDQ6Eg_S749feXeR8nfkGxAw~kkQhZMNhdQPc6TO60ZmyCTrXBYsM7FXg_GhDTYcG2fM~1fAXgdeZP_rV1OWot4mKGc3sIPOH1oFGTH-zp6Z3fCa6Yq0hoOh5zgUTXb8KvPBe3bYmk9R5uohR-m-BwQq7AQ",
+      "messages": {
+        "user": "03a6ada6e09f375d634d595650e7aaf9213dfef7e27c2a8bb4a20a730d44c42d:bob@example.com:1762473600002",
+        "service": "03a6ada6e09f375d634d595650e7aaf9213dfef7e27c2a8bb4a20a730d44c42d:bob@example.com:1762473600002:kkQhZMNhdQPc6TO60ZmyCTrXBYsM7FXg_GhDTYcG2fM:1fAXgdeZP_rV1OWot4mKGc3sIPOH1oFGTH-zp6Z3fCa6Yq0hoOh5zgUTXb8KvPBe3bYmk9R5uohR-m-BwQq7AQ"
+      },
+      "leafHash": "66ee4f1c93e36da7fd0bb17b22552b14b01ec60006f1c66d5406354f59c50b6a",
+      "expected": {
+        "ok": true,
+        "keyId": "gHCAcnlKRXmwM7bQ",
+        "userSigned": true,
+        "userKey": "kkQhZMNhdQPc6TO60ZmyCTrXBYsM7FXg_GhDTYcG2fM"
+      }
+    },
+    {
+      "name": "v2-rotated-out-key",
+      "description": "Version 2 record signed by a service key that has since been rotated out but is still listed in the key document",
+      "signedBy": "rotated",
+      "file": {
+        "utf8": "ContentProof golden fixture: rotated-out key\n",
+        "sha256": "b814e6230c197b47a441fca68fe620e3f75e40083fe9623167695ff816db6559"
+      },
+      "record": {
+        "v": 2,
+        "k": "k4hS0LUx2v7gXIJI",
+        "h": "uBTmIwwZe0ekQfymj-Yg4_deQAg_6WIxZ2lf-BbbZVk",
+        "e": "carol@example.com",
+        "t": 1762387200000,
+        "s": "P7C0zUXeTHD1ULI5yxC39n65MDNYBmsP9vaIZQemSjRjNM2BqSVHzmI9EebB-XxHjYPCS_Ta8oPQwz7d_9eWBA"
+      },
+      "wire": "2~k4hS0LUx2v7gXIJI~uBTmIwwZe0ekQfymj-Yg4_deQAg_6WIxZ2lf-BbbZVk~carol%40example.com~1762387200000~P7C0zUXeTHD1ULI5yxC39n65MDNYBmsP9vaIZQemSjRjNM2BqSVHzmI9EebB-XxHjYPCS_Ta8oPQwz7d_9eWBA",
+      "verificationUrl": "https://www.contentproof.app/verify#P=2~k4hS0LUx2v7gXIJI~uBTmIwwZe0ekQfymj-Yg4_deQAg_6WIxZ2lf-BbbZVk~carol%40example.com~1762387200000~P7C0zUXeTHD1ULI5yxC39n65MDNYBmsP9vaIZQemSjRjNM2BqSVHzmI9EebB-XxHjYPCS_Ta8oPQwz7d_9eWBA",
+      "messages": {
+        "service": "b814e6230c197b47a441fca68fe620e3f75e40083fe9623167695ff816db6559:carol@example.com:1762387200000"
+      },
+      "leafHash": "95e4668e3d86af29281d46acaa39147699eaa55384f8523507ebbe7e79f40e4f",
+      "expected": {
+        "ok": true,
+        "keyId": "k4hS0LUx2v7gXIJI",
+        "userSigned": false
+      }
+    }
+  ],
+  "negative": [
+    {
+      "name": "v2-tampered-email",
+      "description": "The plain v2 record with its email changed after signing",
+      "file": {
+        "utf8": "ContentProof golden fixture: plain v2 record\n",
+        "sha256": "1ae633ea6f0ab748d1c96ee3efb65db55c54e989336da4d85a0006ec82e45c91"
+      },
+      "record": {
+        "v": 2,
+        "k": "gHCAcnlKRXmwM7bQ",
+        "h": "GuYz6m8Kt0jRyW7j77ZdtVxU6YkzbaTYWgAG7ILkXJE",
+        "e": "mallory@example.com",
+        "t": 1762473600000,
+        "s": "wIGeZm_vWR37WcU2SjA-1OWIYnEZnZJSL7Jf0ij6gdpKXa4V0SqBnPr4r6kqVw6OxanPnAlA8fjdtHlJVbQfAg"
+      },
+      "wire": "2~gHCAcnlKRXmwM7bQ~GuYz6m8Kt0jRyW7j77ZdtVxU6YkzbaTYWgAG7ILkXJE~mallory%40example.com~1762473600000~wIGeZm_vWR37WcU2SjA-1OWIYnEZnZJSL7Jf0ij6gdpKXa4V0SqBnPr4r6kqVw6OxanPnAlA8fjdtHlJVbQfAg",
+      "expected": {
+        "ok": false,
+        "reason": "bad-signature"
+      },
+      "expectedWithoutFileHash": {
+        "ok": false,
+        "reason": "bad-signature"
+      }
+    },
+    {
+      "name": "v3-tampered-user-signature",
+      "description": "The v3 record with `us` altered after signing. The service signature covers `u` and `us`, so this is bad-signature, not bad-user-signature",
+      "file": {
+        "utf8": "ContentProof golden fixture: v3 user-signed record\n",
+        "sha256": "03a6ada6e09f375d634d595650e7aaf9213dfef7e27c2a8bb4a20a730d44c42d"
+      },
+      "record": {
+        "v": 3,
+        "k": "gHCAcnlKRXmwM7bQ",
+        "h": "A6atpuCfN11jTVlWUOeq-SE9_vfifCqLtKIKcw1ExC0",
+        "e": "bob@example.com",
+        "t": 1762473600002,
+        "s": "x5tklwJItv_w7Kc56cPR2HCEiftC7oOAUYg7xY3NO3XboF4SAajhrlb6WrNyThaDQ6Eg_S749feXeR8nfkGxAw",
+        "u": "kkQhZMNhdQPc6TO60ZmyCTrXBYsM7FXg_GhDTYcG2fM",
+        "us": "AfAXgdeZP_rV1OWot4mKGc3sIPOH1oFGTH-zp6Z3fCa6Yq0hoOh5zgUTXb8KvPBe3bYmk9R5uohR-m-BwQq7AQ"
+      },
+      "wire": "3~gHCAcnlKRXmwM7bQ~A6atpuCfN11jTVlWUOeq-SE9_vfifCqLtKIKcw1ExC0~bob%40example.com~1762473600002~x5tklwJItv_w7Kc56cPR2HCEiftC7oOAUYg7xY3NO3XboF4SAajhrlb6WrNyThaDQ6Eg_S749feXeR8nfkGxAw~kkQhZMNhdQPc6TO60ZmyCTrXBYsM7FXg_GhDTYcG2fM~AfAXgdeZP_rV1OWot4mKGc3sIPOH1oFGTH-zp6Z3fCa6Yq0hoOh5zgUTXb8KvPBe3bYmk9R5uohR-m-BwQq7AQ",
+      "expected": {
+        "ok": false,
+        "reason": "bad-signature"
+      },
+      "expectedWithoutFileHash": {
+        "ok": false,
+        "reason": "bad-signature"
+      }
+    },
+    {
+      "name": "v3-countersigned-bad-user-signature",
+      "description": "A v3 record the service countersigned although the user signature covers a different timestamp",
+      "file": {
+        "utf8": "ContentProof golden fixture: countersigned bad user signature\n",
+        "sha256": "e1315ebb70443359cf099aac67f30db8b732bc438b991aeed403d9d9bac81e51"
+      },
+      "record": {
+        "v": 3,
+        "k": "gHCAcnlKRXmwM7bQ",
+        "h": "4TFeu3BEM1nPCZqsZ_MNuLcyvEOLmRru1APZ2brIHlE",
+        "e": "dave@example.com",
+        "t": 1762473600003,
+        "s": "PNm2VbTzpF0_Vyl9z4xhgEAhSeQTINBUy1IvqzvYVIJCjLbsrlQrG02gpYX7FkjKWZUGgpsn3YxE2OWpPA1dCQ",
+        "u": "kkQhZMNhdQPc6TO60ZmyCTrXBYsM7FXg_GhDTYcG2fM",
+        "us": "FOtG-FVJ2YZQBtRBbF0Pz-_KUMktQH6hbBrmrzFZkOejHVBA5HqH3G6vKhesAQ8rRwLDIrkRXMZASKWifJpZBg"
+      },
+      "wire": "3~gHCAcnlKRXmwM7bQ~4TFeu3BEM1nPCZqsZ_MNuLcyvEOLmRru1APZ2brIHlE~dave%40example.com~1762473600003~PNm2VbTzpF0_Vyl9z4xhgEAhSeQTINBUy1IvqzvYVIJCjLbsrlQrG02gpYX7FkjKWZUGgpsn3YxE2OWpPA1dCQ~kkQhZMNhdQPc6TO60ZmyCTrXBYsM7FXg_GhDTYcG2fM~FOtG-FVJ2YZQBtRBbF0Pz-_KUMktQH6hbBrmrzFZkOejHVBA5HqH3G6vKhesAQ8rRwLDIrkRXMZASKWifJpZBg",
+      "expected": {
+        "ok": false,
+        "reason": "bad-user-signature"
+      },
+      "expectedWithoutFileHash": {
+        "ok": false,
+        "reason": "bad-user-signature"
+      }
+    },
+    {
+      "name": "unknown-key-id",
+      "description": "A well-formed v2 record signed by a key whose id is not in the key document",
+      "file": {
+        "utf8": "ContentProof golden fixture: unpublished key\n",
+        "sha256": "4d8ea4dbc128529fcf9906d77bc2f9b7bd7363d8eb0aa0d0f8f1cbddabbb3fa3"
+      },
+      "record": {
+        "v": 2,
+        "k": "FvSi4igoyTINvPf2",
+        "h": "TY6k28EoUp_PmQbXe8L5t71zY9jrCqDQ-PHL3au7P6M",
+        "e": "eve@example.com",
+        "t": 1762473600004,
+        "s": "uyWCHXRa_rV8LVTbZjqCLQPXel_9LcEERjT1XpCFdPRO_BMSCcIdlKuyvXfeMl3IBDZG39wIimSnT4xbz7yUBg"
+      },
+      "wire": "2~FvSi4igoyTINvPf2~TY6k28EoUp_PmQbXe8L5t71zY9jrCqDQ-PHL3au7P6M~eve%40example.com~1762473600004~uyWCHXRa_rV8LVTbZjqCLQPXel_9LcEERjT1XpCFdPRO_BMSCcIdlKuyvXfeMl3IBDZG39wIimSnT4xbz7yUBg",
+      "expected": {
+        "ok": false,
+        "reason": "unknown-key"
+      },
+      "expectedWithoutFileHash": {
+        "ok": false,
+        "reason": "unknown-key"
+      }
+    },
+    {
+      "name": "wrong-file",
+      "description": "The genuine plain v2 record checked against a different file",
+      "file": {
+        "utf8": "ContentProof golden fixture: not the file that was signed\n",
+        "sha256": "3edcbf5281686229f8e3c163c8a18deb03cbb7315c86d00c58535996ab094642"
+      },
+      "record": {
+        "v": 2,
+        "k": "gHCAcnlKRXmwM7bQ",
+        "h": "GuYz6m8Kt0jRyW7j77ZdtVxU6YkzbaTYWgAG7ILkXJE",
+        "e": "alice@example.com",
+        "t": 1762473600000,
+        "s": "wIGeZm_vWR37WcU2SjA-1OWIYnEZnZJSL7Jf0ij6gdpKXa4V0SqBnPr4r6kqVw6OxanPnAlA8fjdtHlJVbQfAg"
+      },
+      "wire": "2~gHCAcnlKRXmwM7bQ~GuYz6m8Kt0jRyW7j77ZdtVxU6YkzbaTYWgAG7ILkXJE~alice%40example.com~1762473600000~wIGeZm_vWR37WcU2SjA-1OWIYnEZnZJSL7Jf0ij6gdpKXa4V0SqBnPr4r6kqVw6OxanPnAlA8fjdtHlJVbQfAg",
+      "expected": {
+        "ok": false,
+        "reason": "hash-mismatch"
+      },
+      "expectedWithoutFileHash": {
+        "ok": true,
+        "keyId": "gHCAcnlKRXmwM7bQ",
+        "userSigned": false
+      }
+    }
+  ]
+}

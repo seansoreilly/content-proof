@@ -1,0 +1,28 @@
+{
+  "description": "Pre-version-2 QR payload: base64url JSON {signature, publicKey, timestamp}. The verifier supplies the email and the file.",
+  "file": {
+    "utf8": "ContentProof golden fixture: legacy pre-v2 payload\n",
+    "sha256": "bd633b2e38f28b3f0d5787811d51673ff6ae8857dd6cd68730e4441b0b543007"
+  },
+  "email": "legacy@example.com",
+  "payload": {
+    "signature": "6gACMVItj7xDC-ZCyNOjlARW6ftxx7hW6YasanrUvz1AQHBn4GIYtitzYd6PEIDA4OhmJkYI0l9oYeztnyicBA",
+    "publicKey": "MCowBQYDK2VwAyEA6bdYSjDnkDUNRlCmBllpRiGNiLTd3Dr7xvudGgdiT4I=",
+    "timestamp": 1700000000000
+  },
+  "signedMessage": "bd633b2e38f28b3f0d5787811d51673ff6ae8857dd6cd68730e4441b0b543007:legacy@example.com:1700000000000",
+  "encoded": "eyJzaWduYXR1cmUiOiI2Z0FDTVZJdGo3eERDLVpDeU5PamxBUlc2ZnR4eDdoVzZZYXNhbnJVdnoxQVFIQm40R0lZdGl0ellkNlBFSURBNE9obUprWUkwbDlvWWV6dG55aWNCQSIsInB1YmxpY0tleSI6Ik1Db3dCUVlESzJWd0F5RUE2YmRZU2pEbmtEVU5SbENtQmxscFJpR05pTFRkM0RyN3h2dWRHZ2RpVDRJPSIsInRpbWVzdGFtcCI6MTcwMDAwMDAwMDAwMH0",
+  "link": "https://www.contentproof.app/verify?data=eyJzaWduYXR1cmUiOiI2Z0FDTVZJdGo3eERDLVpDeU5PamxBUlc2ZnR4eDdoVzZZYXNhbnJVdnoxQVFIQm40R0lZdGl0ellkNlBFSURBNE9obUprWUkwbDlvWWV6dG55aWNCQSIsInB1YmxpY0tleSI6Ik1Db3dCUVlESzJWd0F5RUE2YmRZU2pEbmtEVU5SbENtQmxscFJpR05pTFRkM0RyN3h2dWRHZ2RpVDRJPSIsInRpbWVzdGFtcCI6MTcwMDAwMDAwMDAwMH0",
+  "expected": {
+    "ok": true,
+    "keyId": "gHCAcnlKRXmwM7bQ",
+    "userSigned": false
+  },
+  "wrongEmail": {
+    "email": "someone-else@example.com",
+    "expected": {
+      "ok": false,
+      "reason": "bad-signature"
+    }
+  }
+}
