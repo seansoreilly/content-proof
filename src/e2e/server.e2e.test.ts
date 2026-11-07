@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { api, base, login, provider, setClientIp } from "@/e2e/helpers";
 import { makeKeyPair, sha256Hex } from "@/test/fixtures";
 import { keyIdFromSpkiBase64, parsePublicKeysJson } from "@/lib/keyset";
 import { verifyRecord } from "@/lib/crypto/verify";
@@ -23,45 +24,19 @@ import {
  *   E2E_BASE_URL=https://<preview-host> E2E_AUTH_PROVIDER=preview-test \
  *   E2E_AUTH_SECRET=... E2E_VERCEL_BYPASS=... npx vitest run src/e2e
  */
-const base = process.env.E2E_BASE_URL;
-const provider = process.env.E2E_AUTH_PROVIDER ?? "debug";
+setClientIp(10);
 const expectedEmail =
   process.env.E2E_EXPECT_EMAIL ?? (provider === "preview-test" ? "e2e@preview.contentproof.test" : "e2e@example.com");
 
-/** fetch with Vercel's Protection Bypass for Automation header when configured. */
-function api(url: string, init: RequestInit = {}): Promise<Response> {
-  const bypass = process.env.E2E_VERCEL_BYPASS;
-  const headers = new Headers(init.headers);
-  if (bypass) headers.set("x-vercel-protection-bypass", bypass);
-  return fetch(url, { ...init, headers });
-}
-
-function cookiesFrom(res: Response): string {
-  const raw = res.headers.getSetCookie?.() ?? [];
-  return raw.map((c) => c.split(";")[0]).join("; ");
-}
-
 describe.skipIf(!base)("live server flow", () => {
   it("signs in, signs a hash, publishes keys, verifies, and rejects a forgery", async () => {
-    // 1. CSRF token + cookie
-    const csrfRes = await api(`${base}/api/auth/csrf`);
-    const { csrfToken } = (await csrfRes.json()) as { csrfToken: string };
-    let cookie = cookiesFrom(csrfRes);
-
-    // 2. Credentials sign-in: the dev-only debug provider, or the
-    //    preview-only test login with its secret
-    const loginRes = await api(`${base}/api/auth/callback/${provider}`, {
-      method: "POST",
-      redirect: "manual",
-      headers: { "content-type": "application/x-www-form-urlencoded", cookie },
-      body: new URLSearchParams({ csrfToken, json: "true", secret: process.env.E2E_AUTH_SECRET ?? "" }).toString(),
-    });
-    cookie = [cookie, cookiesFrom(loginRes)].filter(Boolean).join("; ");
-    expect(cookie).toMatch(/session-token/);
+    // 1-2. CSRF token, then a credentials sign-in: the dev-only debug
+    //      provider, or the preview-only test login with its secret
+    const { cookie } = await login();
 
     // 3. Sign a hash
     const fileHex = sha256Hex("e2e file contents");
-    const signRes = await api(`${base}/api/sign`, {
+    const signRes = await api(`/api/sign`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({ fileHash: fileHex }),
@@ -72,7 +47,7 @@ describe.skipIf(!base)("live server flow", () => {
     expect(record!.e).toBe(expectedEmail);
 
     // 4. Published keys verify it client-side
-    const keysRes = await api(`${base}/.well-known/public-keys.json`);
+    const keysRes = await api(`/.well-known/public-keys.json`);
     expect(keysRes.headers.get("access-control-allow-origin")).toBe("*");
     const keys = parsePublicKeysJson(await keysRes.json());
     expect(keys).not.toBeNull();
@@ -82,7 +57,7 @@ describe.skipIf(!base)("live server flow", () => {
     expect(decodeRecord(encodeRecord(record!))).toEqual(record);
 
     // 5. Server-side verify agrees, and rejects a forgery
-    const okRes = await api(`${base}/api/verify`, {
+    const okRes = await api(`/api/verify`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(record),
@@ -99,7 +74,7 @@ describe.skipIf(!base)("live server flow", () => {
       t,
       s: rogue.signHex(buildSignedMessage(fileHex, "ceo@gmail.com", t)),
     };
-    const forgedRes = await api(`${base}/api/verify`, {
+    const forgedRes = await api(`/api/verify`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(forged),
@@ -107,15 +82,15 @@ describe.skipIf(!base)("live server flow", () => {
     expect(await forgedRes.json()).toMatchObject({ valid: false, reason: "unknown-key" });
 
     // 6. Record lookup and removed endpoints
-    const lookup = await api(`${base}/api/sig/${record!.s}`);
+    const lookup = await api(`/api/sig/${record!.s}`);
     expect(lookup.status).toBe(200);
     expect(await lookup.json()).toEqual(record);
-    expect((await api(`${base}/api/trust/${encodeURIComponent("x@gmail.com")}`)).status).toBe(404);
+    expect((await api(`/api/trust/${encodeURIComponent("x@gmail.com")}`)).status).toBe(404);
 
     // 7. Pages serve
-    expect((await api(`${base}/verify`)).status).toBe(200);
-    expect((await api(`${base}/sig/${record!.s}`)).status).toBe(200);
-    expect((await api(`${base}/sig/${"A".repeat(86)}`)).status).toBe(404);
+    expect((await api(`/verify`)).status).toBe(200);
+    expect((await api(`/sig/${record!.s}`)).status).toBe(200);
+    expect((await api(`/sig/${"A".repeat(86)}`)).status).toBe(404);
 
     // 7b. Version 3: a browser-held key signs, the service countersigns
     const { generateUserKeyPair, toUserSigningKey } = await import("@/lib/user-keys");
@@ -123,7 +98,7 @@ describe.skipIf(!base)("live server flow", () => {
     const t3 = Date.now();
     const email3 = expectedEmail;
     const userSignature = await userKey.sign(buildSignedMessage(fileHex, email3, t3));
-    const v3Res = await api(`${base}/api/sign`, {
+    const v3Res = await api(`/api/sign`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({ fileHash: fileHex, timestamp: t3, userPublicKey: userKey.publicKey, userSignature }),
@@ -134,14 +109,15 @@ describe.skipIf(!base)("live server flow", () => {
     expect(verifyRecord(v3!, fileHex, keys!)).toMatchObject({ ok: true, userSigned: true, userKey: userKey.publicKey });
 
     // 8. Transparency log: signed head verifies, inclusion proof verifies
-    const head = (await (await api(`${base}/api/log/head`)).json()) as SignedLogHead;
+    const head = (await (await api(`/api/log/head`)).json()) as SignedLogHead;
     expect(verifyLogHead(head, keys!)).toBe(true);
     expect(head.size).toBeGreaterThanOrEqual(1);
     const proof = (await (
-      await api(`${base}/api/log/proof?signature=${encodeURIComponent(record!.s)}`)
+      await api(`/api/log/proof?signature=${encodeURIComponent(record!.s)}`)
     ).json()) as InclusionProofResponse;
     expect(verifyRecordInclusion(record!, proof)).toBe(true);
-    const entries = (await (await api(`${base}/api/log/entries?from=0&limit=5`)).json()) as { size: number };
-    expect(entries.size).toBe(head.size);
+    const entries = (await (await api(`/api/log/entries?from=0&limit=5`)).json()) as { size: number };
+    // Other e2e files sign in parallel, so the log may have grown since the head.
+    expect(entries.size).toBeGreaterThanOrEqual(head.size);
   }, 60_000);
 });
