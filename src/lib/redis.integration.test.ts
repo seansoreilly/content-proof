@@ -76,14 +76,18 @@ async function storedLeaves(redis: Redis): Promise<string[]> {
   return redis.lrange<string>("log:leaves", 0, -1);
 }
 
-describe.skipIf(!redisIntegrationEnabled)("Redis integration (real Redis via the Upstash REST protocol)", () => {
+// A hosted Upstash database is a network round trip per command (hundreds per
+// test for the bulk cases), so allow far more than vitest's 5s default.
+const REMOTE_TIMEOUT_MS = 120_000;
+
+describe.skipIf(!redisIntegrationEnabled)("Redis integration (real Redis via the Upstash REST protocol)", { timeout: REMOTE_TIMEOUT_MS }, () => {
   let redis: Redis;
 
   beforeEach(async () => {
     stubServerKeys(pair);
     redis = testRedis();
     await redis.flushdb();
-  });
+  }, REMOTE_TIMEOUT_MS);
 
   describe("log store", () => {
     it("appends sequentially and get, range, indexOf and leafHashes agree", async () => {
@@ -419,7 +423,7 @@ describe.skipIf(!redisIntegrationEnabled)("Redis integration (real Redis via the
       old = Array.from({ length: 25 }, (_, i) => signedRecord(i));
       for (const [i, record] of old.entries()) expect(await oldAppend(redis, record)).toBe(i);
       expect(await redis.exists("log:leaves")).toBe(0);
-    });
+    }, REMOTE_TIMEOUT_MS);
 
     it("backfills log:leaves exactly once, on the first read", async () => {
       const counted = countEvals(redis);
