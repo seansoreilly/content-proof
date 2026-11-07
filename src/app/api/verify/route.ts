@@ -1,48 +1,59 @@
-import { NextResponse } from "next/server";
 import { verifyRecord } from "@/lib/crypto/verify";
-import { corsHeaders, corsPreflight } from "@/lib/http";
 import { buildPublicKeysJson } from "@/lib/keys";
-import { createRateLimiter, getClientIp, rateLimitedResponse } from "@/lib/rate-limit";
-import { hashB64urlToHex, parseRecordObject } from "@/lib/record";
-import { getCounterStore } from "@/lib/redis";
+import { readJsonBody } from "@/lib/json-body";
+import { jsonResponse, publicOptions, publicRoute } from "@/lib/public-route";
+import { hashB64urlToHex, isHashHex, parseRecordObject, type SignatureRecord } from "@/lib/record";
+import { parseRecordInput } from "@/lib/verifier";
 
-const LIMIT = 60;
-const limiter = createRateLimiter(getCounterStore(), {
-  limit: LIMIT,
-  windowSeconds: 60,
-  prefix: "rl:verify",
-});
-
-export function OPTIONS(): Response {
-  return corsPreflight(["POST"]);
-}
+export const OPTIONS = publicOptions(["POST"]);
 
 /**
- * POST /api/verify  { v, k, h, e, t, s }  →  { valid, keyId?, reason? }
+ * POST /api/verify  →  { valid, keyId, userSigned, userKey, reason }
  *
  * Server-side counterpart of the browser verifier for integrators who would
- * rather not ship crypto. The server has no file, so this checks that the
- * record is genuinely one the service issued; the caller still compares the
- * record's hash with the file they hold.
+ * rather not ship crypto. The body is either the record as a JSON object
+ * `{ v, k, h, e, t, s[, u, us] }` or `{ "record": "<compact record or
+ * verification link>" }`, the form people actually have to hand. Either may
+ * add `"fileHash"` (SHA-256, 64 hex characters): the server never sees the
+ * file, so without it this only proves the record is one the service issued
+ * and the caller must still compare the record's hash with their file; with
+ * it the comparison happens here and a different file comes back as
+ * `hash-mismatch`.
  */
-export async function POST(request: Request): Promise<Response> {
-  try {
-    const decision = await limiter(getClientIp(request));
-    if (!decision.allowed) return rateLimitedResponse(decision, LIMIT, corsHeaders());
+export const POST = publicRoute(
+  {
+    limit: 60,
+    prefix: "rl:verify",
+    failureStatus: 500,
+    failureMessage: "Internal Server Error",
+    logTag: "[verify] failed",
+  },
+  async (request: Request): Promise<Response> => {
+    // Any content type: this endpoint uses no cookies, and cross-origin
+    // integrators may post text/plain to skip the preflight. Size is capped.
+    const read = await readJsonBody(request);
+    if (!read.ok) return jsonResponse({ error: read.error }, read.status);
+    const body = read.value;
+    const fields = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders() });
-    }
-    const record = parseRecordObject(body);
-    if (!record) {
-      return NextResponse.json({ error: "Invalid signature record" }, { status: 400, headers: corsHeaders() });
+    let record: SignatureRecord;
+    if (typeof fields.record === "string") {
+      const parsed = parseRecordInput(fields.record);
+      if (!parsed.ok) return jsonResponse({ error: `Invalid record: ${parsed.message}` }, 400);
+      record = parsed.record;
+    } else {
+      const parsed = parseRecordObject(body);
+      if (!parsed) return jsonResponse({ error: "Invalid signature record" }, 400);
+      record = parsed;
     }
 
-    const result = verifyRecord(record, hashB64urlToHex(record.h), buildPublicKeysJson());
-    return NextResponse.json(
+    const { fileHash } = fields;
+    if (fileHash !== undefined && !isHashHex(fileHash)) {
+      return jsonResponse({ error: "Invalid fileHash: expected a SHA-256 digest as 64 hex characters" }, 400);
+    }
+
+    const result = verifyRecord(record, fileHash ?? hashB64urlToHex(record.h), buildPublicKeysJson());
+    return jsonResponse(
       {
         valid: result.ok,
         keyId: result.keyId ?? null,
@@ -50,10 +61,7 @@ export async function POST(request: Request): Promise<Response> {
         userKey: result.userKey ?? null,
         reason: result.reason ?? null,
       },
-      { status: 200, headers: corsHeaders() }
+      200
     );
-  } catch (error) {
-    console.error("[verify] failed", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500, headers: corsHeaders() });
   }
-}
+);

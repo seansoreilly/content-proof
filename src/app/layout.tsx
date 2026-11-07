@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { Bricolage_Grotesque, Source_Serif_4, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/SessionProvider";
-import Script from "next/script";
-import { GA_TRACKING_ID, gaInitScript } from "@/lib/analytics";
+import { ConsentBanner } from "@/components/ConsentBanner";
 import Link from "next/link";
 import { DevelopmentBuildInfo, SealMark } from "@/components/ui";
 
@@ -68,16 +67,11 @@ export default function RootLayout({
             <Link href="/privacy" className="-my-2 py-3 hover:text-ink">
               Privacy
             </Link>
+            <Link href="/account" className="-my-2 py-3 hover:text-ink">
+              Account
+            </Link>
           </nav>
         </header>
-        {/* Google Analytics */}
-        <Script
-          src={`https://www.googletagmanager.com/gtag/js?id=${GA_TRACKING_ID}`}
-          strategy="afterInteractive"
-        />
-        <Script id="ga-init" strategy="afterInteractive">
-          {gaInitScript()}
-        </Script>
         <AuthProvider>
           <main className="min-h-screen">{children}</main>
         </AuthProvider>
@@ -105,6 +99,8 @@ export default function RootLayout({
             </a>
           </p>
         </footer>
+        {/* Google Analytics loads only on production hosts after opt-in. */}
+        <ConsentBanner />
       </body>
     </html>
   );

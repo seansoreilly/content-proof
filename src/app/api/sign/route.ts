@@ -1,16 +1,14 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
-import { InvalidUserSignatureError, signFileHash, type UserSignature } from "@/lib/crypto/ed25519";
-import { base64ToBytes, toBase64Url } from "@/lib/base64";
-import { buildPublicKeysJson } from "@/lib/keys";
+import { InvalidUserSignatureError, signFileHash } from "@/lib/crypto/ed25519";
+import { jsonRequestHeadersError, readJsonBody } from "@/lib/json-body";
+import { getServiceRawPublicKeys } from "@/lib/keys";
 import { createRateLimiter, rateLimitedResponse } from "@/lib/rate-limit";
-import { isRawPublicKey, isSignatureString } from "@/lib/record";
-import { getCounterStore, getLogStore, getRecordStore } from "@/lib/redis";
-
-const HASH_HEX_RE = /^[0-9a-fA-F]{64}$/;
-/** How far the client's proposed timestamp may differ from the server clock. */
-const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+import { getCounterStore, getLogStore, getRecordStore, getUserKeyRegistry } from "@/lib/redis";
+import { parseSignRequest } from "@/lib/sign-request";
+import { isCorruptKeyEntryError } from "@/lib/user-key-registry";
+import { USER_KEY_REVOKED_MESSAGE } from "@/lib/user-key-status";
 
 // 30 signatures per account per minute is generous for a human and a hard
 // ceiling for anything scripted.
@@ -23,9 +21,7 @@ const limiter = createRateLimiter(getCounterStore(), {
 
 /** True when the base64url raw key equals the raw key of any published service key. */
 function isServiceKey(userPublicKey: string): boolean {
-  return Object.values(buildPublicKeysJson().keys).some(
-    (entry) => toBase64Url(base64ToBytes(entry.publicKey).slice(-32)) === userPublicKey
-  );
+  return getServiceRawPublicKeys().has(userPublicKey);
 }
 
 /**
@@ -33,11 +29,22 @@ function isServiceKey(userPublicKey: string): boolean {
  *   { fileHash }                                              → version 2 record
  *   { fileHash, timestamp, userPublicKey, userSignature }     → version 3 record
  *
+ * Responds `{ record, logIndex, logged }`. Storage failures do not block
+ * signing: `logged` is false and `logIndex` null when the record could not be
+ * stored or appended to the transparency log.
+ *
  * The file itself never reaches the server; the browser hashes it. For a
  * version 3 record the browser also signs `<hash>:<email>:<timestamp>` with the
  * account holder's own key, so it must choose the timestamp; the server accepts
  * it only within a small clock-skew window, verifies the user signature, then
  * countersigns.
+ *
+ * Version 3 requests are also checked against the key registry: a revoked key,
+ * or a key already registered to another account, is refused with 403, and a
+ * corrupt registry entry with 503. Any other registry failure (an outage) is
+ * logged and signing proceeds (fail open, like the
+ * rate limiter), because the registry guards key hygiene, not the validity of
+ * the signature itself.
  */
 export async function POST(request: Request): Promise<Response> {
   try {
@@ -47,49 +54,33 @@ export async function POST(request: Request): Promise<Response> {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Before the limiter: a cross-site form post or an announced oversized
+    // body must not even spend the budget.
+    const headersError = jsonRequestHeadersError(request);
+    if (headersError) return NextResponse.json({ error: headersError.error }, { status: headersError.status });
+
     const decision = await limiter(email.toLowerCase());
     if (!decision.allowed) return rateLimitedResponse(decision, LIMIT);
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    const body = await readJsonBody(request);
+    if (!body.ok) return NextResponse.json({ error: body.error }, { status: body.status });
+    const now = Date.now();
+    const parsed = parseSignRequest(body.value, now, isServiceKey);
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
-    const input = (body ?? {}) as {
-      fileHash?: unknown;
-      timestamp?: unknown;
-      userPublicKey?: unknown;
-      userSignature?: unknown;
-    };
-    if (typeof input.fileHash !== "string" || !HASH_HEX_RE.test(input.fileHash)) {
-      return NextResponse.json({ error: "Invalid fileHash" }, { status: 400 });
-    }
+    const signRequest = parsed.request;
+    const timestamp = signRequest.kind === "user" ? signRequest.timestamp : now;
+    const user = signRequest.kind === "user" ? signRequest.user : undefined;
 
-    let timestamp = Date.now();
-    let user: UserSignature | undefined;
-    if (input.userPublicKey !== undefined || input.userSignature !== undefined || input.timestamp !== undefined) {
-      if (!isRawPublicKey(input.userPublicKey) || !isSignatureString(input.userSignature)) {
-        return NextResponse.json({ error: "Invalid user key or signature" }, { status: 400 });
-      }
-      if (isServiceKey(input.userPublicKey)) {
-        // A service signature over `<hash>:<email>:<t>` (v2) must never be
-        // replayable as a "user" signature, so service keys cannot be user keys.
-        return NextResponse.json({ error: "User key must not be a service key" }, { status: 400 });
-      }
-      if (typeof input.timestamp !== "number" || !Number.isInteger(input.timestamp)) {
-        return NextResponse.json({ error: "timestamp must be an integer (ms since epoch)" }, { status: 400 });
-      }
-      if (Math.abs(input.timestamp - Date.now()) > MAX_CLOCK_SKEW_MS) {
-        return NextResponse.json({ error: "timestamp is too far from server time" }, { status: 400 });
-      }
-      timestamp = input.timestamp;
-      user = { publicKey: input.userPublicKey, signature: input.userSignature };
+    if (user) {
+      const refusal = await checkUserKey(email, user.publicKey);
+      if (refusal) return NextResponse.json({ error: refusal.error }, { status: refusal.status });
     }
 
     let record;
     try {
-      record = signFileHash(input.fileHash, email, timestamp, user);
+      record = signFileHash(signRequest.fileHash, email, timestamp, user);
     } catch (error) {
       if (error instanceof InvalidUserSignatureError) {
         return NextResponse.json({ error: "User signature does not verify" }, { status: 400 });
@@ -102,13 +93,53 @@ export async function POST(request: Request): Promise<Response> {
       await getRecordStore().put(record);
       logIndex = await getLogStore().append(record);
     } catch (storeError) {
-      // Storage is optional; the record is self-contained.
-      console.warn("[sign] record store unavailable", storeError);
+      // The record is self-contained and verifies without storage, so the user
+      // still gets it. But a missing record or log entry must never be silent:
+      // log it loudly and tell the client through `logged`.
+      console.error("[sign] record NOT persisted / not in transparency log", storeError);
     }
 
-    return NextResponse.json({ record, logIndex }, { status: 200 });
+    if (user) await recordUserKey(email, user.publicKey, now);
+
+    return NextResponse.json({ record, logIndex, logged: logIndex !== null }, { status: 200 });
   } catch (error) {
     console.error("[sign] failed", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+/** Why this account may not sign with the key, as a status and message, or null to proceed. */
+async function checkUserKey(email: string, publicKey: string): Promise<{ status: 403 | 503; error: string } | null> {
+  let owner;
+  try {
+    owner = await getUserKeyRegistry().lookup(publicKey);
+  } catch (error) {
+    if (isCorruptKeyEntryError(error)) {
+      // The unreadable entry may have recorded a revocation; do not guess.
+      console.error("[sign] key registry entry is corrupt; refusing", error);
+      return { status: 503, error: "Signing key status unavailable" };
+    }
+    console.error("[sign] key registry lookup failed; signing anyway", error);
+    return null;
+  }
+  if (!owner) return null;
+  if (owner.revokedAt !== undefined) return { status: 403, error: USER_KEY_REVOKED_MESSAGE };
+  if (owner.email !== email.toLowerCase()) {
+    return { status: 403, error: "This signing key is registered to another account" };
+  }
+  return null;
+}
+
+/**
+ * Record the key's first and last use. Runs after signing and never fails the
+ * request. The registry itself refuses to un-revoke or re-home a key, so a
+ * revocation racing this request cannot be undone by it.
+ */
+async function recordUserKey(email: string, publicKey: string, now: number): Promise<void> {
+  try {
+    const result = await getUserKeyRegistry().touch(email, publicKey, now);
+    if (result !== "recorded") console.warn(`[sign] key registry did not record the key: ${result}`);
+  } catch (error) {
+    console.error("[sign] key registry update failed", error);
   }
 }

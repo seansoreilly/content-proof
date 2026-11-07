@@ -1,12 +1,8 @@
-import { NextResponse } from "next/server";
-import { corsHeaders, corsPreflight, parseNonNegativeInt } from "@/lib/http";
+import { parseNonNegativeInt } from "@/lib/http";
 import { buildInclusionProof } from "@/lib/log-head";
-import { createRateLimiter, getClientIp, rateLimitedResponse } from "@/lib/rate-limit";
-import { getCounterStore, getLogStore } from "@/lib/redis";
-
-const SIGNATURE_RE = /^[A-Za-z0-9_-]{86}$/;
-const LIMIT = 60;
-const limiter = createRateLimiter(getCounterStore(), { limit: LIMIT, windowSeconds: 60, prefix: "rl:log-proof" });
+import { jsonResponse, publicOptions, publicRoute } from "@/lib/public-route";
+import { isSignatureString } from "@/lib/record";
+import { getLogStore } from "@/lib/redis";
 
 /**
  * GET /api/log/proof?index=N   or   ?signature=<record signature>
@@ -17,31 +13,32 @@ const limiter = createRateLimiter(getCounterStore(), { limit: LIMIT, windowSecon
  */
 export const dynamic = "force-dynamic";
 
-export function OPTIONS(): Response {
-  return corsPreflight(["GET"]);
-}
+export const OPTIONS = publicOptions(["GET"]);
 
-export async function GET(request: Request): Promise<Response> {
-  const decision = await limiter(getClientIp(request));
-  if (!decision.allowed) return rateLimitedResponse(decision, LIMIT, corsHeaders());
+const fail = (error: string, status: number): Response => jsonResponse({ error }, status);
 
-  const url = new URL(request.url);
-  const indexParam = url.searchParams.get("index");
-  const signature = url.searchParams.get("signature");
+export const GET = publicRoute(
+  {
+    limit: 60,
+    prefix: "rl:log-proof",
+    failureStatus: 503,
+    failureMessage: "Log unavailable",
+    logTag: "[log/proof] failed",
+  },
+  async (request: Request): Promise<Response> => {
+    const url = new URL(request.url);
+    const indexParam = url.searchParams.get("index");
+    const signature = url.searchParams.get("signature");
 
-  const fail = (error: string, status: number): Response =>
-    NextResponse.json({ error }, { status, headers: corsHeaders() });
+    if (indexParam !== null && signature !== null) return fail("Provide index or signature, not both", 400);
 
-  if (indexParam !== null && signature !== null) return fail("Provide index or signature, not both", 400);
-
-  try {
     const log = getLogStore();
     let index: number | null = null;
     if (indexParam !== null) {
       index = parseNonNegativeInt(indexParam);
       if (index === null) return fail("index must be a non-negative integer", 400);
     } else if (signature !== null) {
-      if (!SIGNATURE_RE.test(signature)) return fail("Invalid signature", 400);
+      if (!isSignatureString(signature)) return fail("Invalid signature", 400);
       index = await log.indexOf(signature);
       if (index === null) return fail("Record not in log", 404);
     } else {
@@ -50,9 +47,6 @@ export async function GET(request: Request): Promise<Response> {
 
     const proof = await buildInclusionProof(log, index);
     if (!proof) return fail("No such entry", 404);
-    return NextResponse.json(proof, { status: 200, headers: corsHeaders({ "Cache-Control": "no-store" }) });
-  } catch (error) {
-    console.error("[log/proof] failed", error);
-    return fail("Log unavailable", 503);
+    return jsonResponse(proof, 200, { "Cache-Control": "no-store" });
   }
-}
+);

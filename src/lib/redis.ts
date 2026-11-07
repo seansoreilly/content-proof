@@ -1,7 +1,10 @@
 import { Redis } from "@upstash/redis";
 import { createMemoryLogStore, createRedisLogStore, type LogStore } from "@/lib/log-store";
-import { createMemoryStore, type CounterStore } from "@/lib/rate-limit";
-import { parseRecordObject, type SignatureRecord } from "@/lib/record";
+import { createMemoryStore, createRedisCounterStore, type CounterStore } from "@/lib/rate-limit";
+import { createMemoryRecordStore, createRedisRecordStore, type RecordStore } from "@/lib/record-store";
+import { createMemoryUserKeyRegistry, createRedisUserKeyRegistry, type UserKeyRegistry } from "@/lib/user-key-registry";
+
+export type { RecordStore } from "@/lib/record-store";
 
 /**
  * Optional Upstash Redis backing for rate limiting and record storage. The
@@ -28,8 +31,9 @@ export function getRedis(): Redis | null {
  */
 interface MemoryStores {
   counters: CounterStore;
-  records: Map<string, SignatureRecord>;
+  records: RecordStore;
   log: LogStore;
+  userKeys: UserKeyRegistry;
 }
 const memoryKey = "__contentproofMemoryStores" as const;
 const globalStores = globalThis as typeof globalThis & { [memoryKey]?: MemoryStores };
@@ -37,60 +41,81 @@ const memory: MemoryStores =
   globalStores[memoryKey] ??
   (globalStores[memoryKey] = {
     counters: createMemoryStore(),
-    records: new Map<string, SignatureRecord>(),
+    records: createMemoryRecordStore(),
     log: createMemoryLogStore(),
+    userKeys: createMemoryUserKeyRegistry(),
   });
-const memoryCounters = memory.counters;
+// A holder created by an older bundle (before hot reload added a store) lacks the newer fields.
+memory.userKeys ??= createMemoryUserKeyRegistry();
+
+let redisCounters: CounterStore | null = null;
+let redisRecords: RecordStore | null = null;
+let redisLog: LogStore | null = null;
+let redisUserKeys: UserKeyRegistry | null = null;
 
 export function getCounterStore(): CounterStore {
   const redis = getRedis();
-  if (!redis) return memoryCounters;
-  return {
-    incr: (key) => redis.incr(key),
-    expire: (key, seconds) => redis.expire(key, seconds),
-  };
+  if (!redis) return memory.counters;
+  if (!redisCounters) redisCounters = createRedisCounterStore(redis);
+  return redisCounters;
 }
 
-export interface RecordStore {
-  put(record: SignatureRecord): Promise<void>;
-  get(signature: string): Promise<SignatureRecord | null>;
+export interface StorageStatus {
+  /** Whether records and the transparency log survive a restart. */
+  durable: boolean;
+  backend: "redis" | "memory";
 }
 
-const RECORD_TTL_SECONDS = 365 * 24 * 60 * 60;
-const memoryRecords = memory.records;
-const memoryLog = memory.log;
-let redisLog: LogStore | null = null;
+let warnedEphemeral = false;
 
-/** The append-only transparency log. Entries never expire. */
-export function getLogStore(): LogStore {
+/**
+ * In production the memory fallback means every restart or new instance
+ * silently loses the record store and the transparency log, and the tree
+ * heads archived so far stop matching. That is a misconfiguration, but one
+ * the service can still limp along with, so it is reported loudly once per
+ * process rather than refused. Called from the record and log accessors, not
+ * the counter store, which route modules touch at import time during
+ * `next build`.
+ */
+function warnIfEphemeral(redis: Redis | null): void {
+  if (redis || warnedEphemeral || process.env.NODE_ENV !== "production") return;
+  warnedEphemeral = true;
+  console.error(
+    "[storage] Redis is not configured (UPSTASH_REDIS_REST_URL/TOKEN or KV_REST_API_URL/TOKEN). " +
+      "Using the in-memory fallback: issued records and the transparency log WILL NOT PERSIST " +
+      "across restarts or instances."
+  );
+}
+
+/** Which backend the stores use, for /api/health. */
+export function storageStatus(): StorageStatus {
   const redis = getRedis();
-  if (!redis) return memoryLog;
-  if (!redisLog) redisLog = createRedisLogStore(redis);
-  return redisLog;
+  warnIfEphemeral(redis);
+  return redis ? { durable: true, backend: "redis" } : { durable: false, backend: "memory" };
 }
 
 export function getRecordStore(): RecordStore {
   const redis = getRedis();
-  if (!redis) {
-    return {
-      async put(record) {
-        memoryRecords.set(record.s, record);
-      },
-      async get(signature) {
-        return memoryRecords.get(signature) ?? null;
-      },
-    };
-  }
-  return {
-    async put(record) {
-      await redis.set(`sig:${record.s}`, JSON.stringify(record), { ex: RECORD_TTL_SECONDS });
-    },
-    async get(signature) {
-      const raw = await redis.get<unknown>(`sig:${signature}`);
-      if (raw === null || raw === undefined) return null;
-      // Upstash auto-deserialises JSON; tolerate either shape.
-      const parsed = typeof raw === "string" ? (JSON.parse(raw) as unknown) : raw;
-      return parseRecordObject(parsed);
-    },
-  };
+  warnIfEphemeral(redis);
+  if (!redis) return memory.records;
+  if (!redisRecords) redisRecords = createRedisRecordStore(redis);
+  return redisRecords;
+}
+
+/** The append-only transparency log. Entries never expire. */
+export function getLogStore(): LogStore {
+  const redis = getRedis();
+  warnIfEphemeral(redis);
+  if (!redis) return memory.log;
+  if (!redisLog) redisLog = createRedisLogStore(redis);
+  return redisLog;
+}
+
+/** Account browser keys and their revocation state. */
+export function getUserKeyRegistry(): UserKeyRegistry {
+  const redis = getRedis();
+  warnIfEphemeral(redis);
+  if (!redis) return memory.userKeys;
+  if (!redisUserKeys) redisUserKeys = createRedisUserKeyRegistry(redis);
+  return redisUserKeys;
 }

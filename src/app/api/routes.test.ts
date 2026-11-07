@@ -5,8 +5,12 @@ import { buildSignedMessage, decodeRecord, encodeRecord, hashHexToB64url, type S
 import { base64ToBytes, bytesToHex, toBase64Url } from "@/lib/base64";
 import { createMemoryStore } from "@/lib/rate-limit";
 import { createMemoryLogStore } from "@/lib/log-store";
+import { createMemoryRecordStore, type ListByEmailOptions } from "@/lib/record-store";
+import { CorruptKeyEntryError, createMemoryUserKeyRegistry, type UserKeyRegistry } from "@/lib/user-key-registry";
 import { recordLeafHash, verifyInclusionProof, verifyLogHead, verifyRecordInclusion, type InclusionProofResponse, type SignedLogHead } from "@/lib/log-verify";
 import { parsePublicKeysJson } from "@/lib/keyset";
+import { createVerificationUrl } from "@/lib/record";
+import { stringToBase64Url } from "@/lib/base64";
 
 const session = { user: { email: "signer@gmail.com" } as { email: string } | null };
 
@@ -16,16 +20,40 @@ vi.mock("next-auth", () => ({
 
 // Shared in-memory stores so the sign route and the lookup route see the same data.
 const records = new Map<string, SignatureRecord>();
+// A real memory store alongside the map, so the account listing sees the same writes.
+let recordStore = createMemoryRecordStore();
 let log = createMemoryLogStore();
+let recordPutError: Error | null = null;
+// A real memory registry, so revocation is exercised end to end. Without it a
+// missing accessor would throw, be swallowed by the fail-open path, and every
+// v3 test would pass without touching the registry.
+let userKeys = createMemoryUserKeyRegistry();
+let registryError: Error | null = null;
+const registry: UserKeyRegistry = {
+  lookup: async (publicKey) => {
+    if (registryError) throw registryError;
+    return userKeys.lookup(publicKey);
+  },
+  touch: async (email, publicKey, now) => {
+    if (registryError) throw registryError;
+    return userKeys.touch(email, publicKey, now);
+  },
+  list: (email) => userKeys.list(email),
+  revoke: (email, publicKey, now) => userKeys.revoke(email, publicKey, now),
+};
 vi.mock("@/lib/redis", () => ({
   getCounterStore: () => createMemoryStore(),
   getRecordStore: () => ({
     put: async (r: SignatureRecord) => {
+      if (recordPutError) throw recordPutError;
       records.set(r.s, r);
+      await recordStore.put(r);
     },
     get: async (s: string) => records.get(s) ?? null,
+    listByEmail: (email: string, options: ListByEmailOptions) => recordStore.listByEmail(email, options),
   }),
   getLogStore: () => log,
+  getUserKeyRegistry: () => registry,
 }));
 
 async function routes() {
@@ -37,7 +65,11 @@ async function routes() {
   const logHead = await import("@/app/api/log/head/route");
   const logEntries = await import("@/app/api/log/entries/route");
   const logProof = await import("@/app/api/log/proof/route");
-  return { sign, verify, wellKnown, lookup, logHead, logEntries, logProof };
+  const accountRecords = await import("@/app/api/account/records/route");
+  const accountKeys = await import("@/app/api/account/keys/route");
+  const revokeKey = await import("@/app/api/account/keys/revoke/route");
+  const userKeyStatus = await import("@/app/api/keys/user/[key]/route");
+  return { sign, verify, wellKnown, lookup, logHead, logEntries, logProof, accountRecords, accountKeys, revokeKey, userKeyStatus };
 }
 
 describe("API routes", () => {
@@ -45,7 +77,11 @@ describe("API routes", () => {
 
   beforeEach(() => {
     records.clear();
+    recordStore = createMemoryRecordStore();
     log = createMemoryLogStore();
+    recordPutError = null;
+    userKeys = createMemoryUserKeyRegistry();
+    registryError = null;
     session.user = { email: "signer@gmail.com" };
     stubServerKeys();
   });
@@ -230,6 +266,31 @@ describe("API routes", () => {
     expect(records.get(body.record.s)).toEqual(body.record);
   });
 
+  it("reports a stored, logged record with logged: true", async () => {
+    const { sign } = await routes();
+    const res = await sign.POST(jsonRequest("http://t/api/sign", { fileHash: fileHex }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ logIndex: 0, logged: true });
+  });
+
+  it("still signs with 200 but reports logged: false when storage fails", async () => {
+    recordPutError = new Error("redis down");
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { sign, verify } = await routes();
+    const res = await sign.POST(jsonRequest("http://t/api/sign", { fileHash: fileHex }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { record: SignatureRecord; logIndex: number | null; logged: boolean };
+    expect(body.logged).toBe(false);
+    expect(body.logIndex).toBeNull();
+    expect(body.record).toMatchObject({ v: 2, e: "signer@gmail.com", h: hashHexToB64url(fileHex) });
+    expect(records.size).toBe(0);
+    expect(await log.size()).toBe(0);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("NOT persisted"), recordPutError);
+    // The record is self-contained and still verifies.
+    expect(await (await verify.POST(jsonRequest("http://t/api/verify", body.record))).json()).toMatchObject({ valid: true });
+    error.mockRestore();
+  });
+
   it("countersigns a browser-held key's signature into a v3 record and verifies it", async () => {
     const { sign, verify } = await routes();
     const { generateUserKeyPair, toUserSigningKey } = await import("@/lib/user-keys");
@@ -349,5 +410,330 @@ describe("API routes", () => {
       params: Promise.resolve({ signature: "A".repeat(86) }),
     });
     expect(missing.status).toBe(404);
+  });
+
+  describe("GET /api/account/records", () => {
+    type ListBody = { records: Array<{ record: SignatureRecord; logIndex?: number }>; nextCursor: string | null };
+    const list = async (
+      accountRecords: { GET: (r: Request) => Promise<Response> },
+      qs = ""
+    ): Promise<Response> => accountRecords.GET(new Request(`http://t/api/account/records${qs}`));
+
+    it("requires a session and is not CORS-enabled", async () => {
+      const { accountRecords } = await routes();
+      session.user = null;
+      const res = await list(accountRecords);
+      expect(res.status).toBe(401);
+      expect(res.headers.get("access-control-allow-origin")).toBeNull();
+      expect("OPTIONS" in accountRecords).toBe(false);
+    });
+
+    it("lists only the session account's records, newest first, with log indexes and a cursor", async () => {
+      const { sign, accountRecords } = await routes();
+      const mine: SignatureRecord[] = [];
+      for (let i = 0; i < 3; i++) {
+        const res = await sign.POST(jsonRequest("http://t/api/sign", { fileHash: sha256Hex(`mine ${i}`) }));
+        mine.push(((await res.json()) as { record: SignatureRecord }).record);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+      }
+      session.user = { email: "other@gmail.com" };
+      await sign.POST(jsonRequest("http://t/api/sign", { fileHash: sha256Hex("theirs") }));
+
+      session.user = { email: "Signer@Gmail.com" };
+      const first = await list(accountRecords, "?limit=2");
+      expect(first.status).toBe(200);
+      expect(first.headers.get("access-control-allow-origin")).toBeNull();
+      const page1 = (await first.json()) as ListBody;
+      expect(page1.records).toEqual([
+        { record: mine[2], logIndex: 2 },
+        { record: mine[1], logIndex: 1 },
+      ]);
+      expect(page1.nextCursor).toEqual(expect.any(String));
+
+      const page2 = (await (await list(accountRecords, `?limit=2&cursor=${page1.nextCursor}`)).json()) as ListBody;
+      expect(page2).toEqual({ records: [{ record: mine[0], logIndex: 0 }], nextCursor: null });
+      expect(JSON.stringify([page1, page2])).not.toContain("other@gmail.com");
+    });
+
+    it("rejects a bad limit or cursor", async () => {
+      const { accountRecords } = await routes();
+      for (const bad of ["?limit=0", "?limit=", "?limit=1.5", "?cursor=nope"]) {
+        expect((await list(accountRecords, bad)).status, bad).toBe(400);
+      }
+      expect(((await (await list(accountRecords, "?limit=9999")).json()) as ListBody).records).toEqual([]);
+    });
+  });
+
+  describe("user key registry", () => {
+    type Key = { publicKey: string; firstSeen: number; lastSeen: number; revokedAt?: number };
+
+    async function browserKey(): Promise<{ publicKey: string; sign: (m: string) => Promise<string> }> {
+      const { generateUserKeyPair, toUserSigningKey } = await import("@/lib/user-keys");
+      return toUserSigningKey(await generateUserKeyPair());
+    }
+
+    async function signV3(
+      sign: { POST: (r: Request) => Promise<Response> },
+      key: { publicKey: string; sign: (m: string) => Promise<string> },
+      email: string,
+      file = "file"
+    ): Promise<Response> {
+      const timestamp = Date.now();
+      const fileHash = sha256Hex(file);
+      const userSignature = await key.sign(buildSignedMessage(fileHash, email, timestamp));
+      return sign.POST(jsonRequest("http://t/api/sign", { fileHash, timestamp, userPublicKey: key.publicKey, userSignature }));
+    }
+
+    const revokeRequest = (publicKey: unknown): Request => jsonRequest("http://t/api/account/keys/revoke", { publicKey });
+
+    it("records the key on v3 signing and lists it for the account only", async () => {
+      const { sign, accountKeys } = await routes();
+      const key = await browserKey();
+      expect((await signV3(sign, key, "signer@gmail.com")).status).toBe(200);
+      expect((await signV3(sign, key, "signer@gmail.com", "second")).status).toBe(200);
+      // v2 signing registers nothing
+      await sign.POST(jsonRequest("http://t/api/sign", { fileHash: fileHex }));
+
+      const res = await accountKeys.GET();
+      expect(res.status).toBe(200);
+      expect(res.headers.get("access-control-allow-origin")).toBeNull();
+      const { keys } = (await res.json()) as { keys: Key[] };
+      expect(keys).toHaveLength(1);
+      expect(keys[0]).toMatchObject({ publicKey: key.publicKey });
+      expect(keys[0].lastSeen).toBeGreaterThanOrEqual(keys[0].firstSeen);
+      expect(keys[0].revokedAt).toBeUndefined();
+
+      session.user = { email: "other@gmail.com" };
+      expect(await (await accountKeys.GET()).json()).toEqual({ keys: [] });
+      session.user = null;
+      expect((await accountKeys.GET()).status).toBe(401);
+    });
+
+    it("refuses a revoked key with 403 and logs nothing", async () => {
+      const { sign, revokeKey, accountKeys } = await routes();
+      const key = await browserKey();
+      expect((await signV3(sign, key, "signer@gmail.com")).status).toBe(200);
+      expect(await log.size()).toBe(1);
+
+      const revoked = await revokeKey.POST(revokeRequest(key.publicKey));
+      expect(revoked.status).toBe(200);
+      const { key: entry } = (await revoked.json()) as { key: Key };
+      expect(entry.revokedAt).toEqual(expect.any(Number));
+
+      const refused = await signV3(sign, key, "signer@gmail.com", "after revocation");
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toEqual({ error: "This signing key has been revoked" });
+      expect(await log.size()).toBe(1);
+
+      // Revocation is permanent and idempotent: revoking again keeps the first time.
+      const again = (await (await revokeKey.POST(revokeRequest(key.publicKey))).json()) as { key: Key };
+      expect(again.key.revokedAt).toBe(entry.revokedAt);
+      const { keys } = (await (await accountKeys.GET()).json()) as { keys: Key[] };
+      expect(keys[0].revokedAt).toBe(entry.revokedAt);
+    });
+
+    it("refuses a key registered to another account", async () => {
+      const { sign } = await routes();
+      const key = await browserKey();
+      expect((await signV3(sign, key, "signer@gmail.com")).status).toBe(200);
+
+      session.user = { email: "mallory@gmail.com" };
+      const res = await signV3(sign, key, "mallory@gmail.com");
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: "This signing key is registered to another account" });
+      expect(await log.size()).toBe(1);
+
+      // The same account in different letter case is still the owner.
+      session.user = { email: "Signer@Gmail.com" };
+      expect((await signV3(sign, key, "Signer@Gmail.com")).status).toBe(200);
+    });
+
+    it("fails open when the registry is unavailable", async () => {
+      const { sign } = await routes();
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      registryError = new Error("redis down");
+      const res = await signV3(sign, await browserKey(), "signer@gmail.com");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ logged: true });
+      expect(error).toHaveBeenCalledWith(expect.stringContaining("lookup failed"), registryError);
+
+      // ...but not when the entry exists and is unreadable: it may record a revocation.
+      const key = await browserKey();
+      registryError = new CorruptKeyEntryError(key.publicKey);
+      const refused = await signV3(sign, key, "signer@gmail.com", "corrupt");
+      expect(refused.status).toBe(503);
+      expect(await refused.json()).toEqual({ error: "Signing key status unavailable" });
+      expect(await log.size()).toBe(1);
+      error.mockRestore();
+    });
+
+    it("revokes only the session account's own, well-formed keys", async () => {
+      const { sign, revokeKey } = await routes();
+      const key = await browserKey();
+      await signV3(sign, key, "signer@gmail.com");
+
+      expect((await revokeKey.POST(revokeRequest("not-a-key"))).status).toBe(400);
+      const badJson = new Request("http://t/api/account/keys/revoke", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{",
+      });
+      expect((await revokeKey.POST(badJson)).status).toBe(400);
+      expect((await revokeKey.POST(revokeRequest((await browserKey()).publicKey))).status).toBe(404);
+
+      session.user = { email: "mallory@gmail.com" };
+      expect((await revokeKey.POST(revokeRequest(key.publicKey))).status).toBe(404);
+      session.user = null;
+      expect((await revokeKey.POST(revokeRequest(key.publicKey))).status).toBe(401);
+
+      session.user = { email: "signer@gmail.com" };
+      expect((await signV3(sign, key, "signer@gmail.com", "still fine")).status).toBe(200);
+    });
+
+    it("serves public key status with CORS and without the email", async () => {
+      const { sign, revokeKey, userKeyStatus } = await routes();
+      const status = (key: string, ip = "203.0.113.9"): Promise<Response> =>
+        userKeyStatus.GET(new Request(`http://t/api/keys/user/${key}`, { headers: { "x-forwarded-for": ip } }), {
+          params: Promise.resolve({ key }),
+        });
+      const key = await browserKey();
+
+      const unknown = await status(key.publicKey);
+      expect(unknown.status).toBe(200);
+      expect(unknown.headers.get("access-control-allow-origin")).toBe("*");
+      expect(await unknown.json()).toEqual({ publicKey: key.publicKey, known: false, revokedAt: null });
+
+      await signV3(sign, key, "signer@gmail.com");
+      expect(await (await status(key.publicKey)).json()).toEqual({ publicKey: key.publicKey, known: true, revokedAt: null });
+
+      await revokeKey.POST(revokeRequest(key.publicKey));
+      const revoked = await status(key.publicKey);
+      const text = await revoked.text();
+      expect(JSON.parse(text)).toEqual({ publicKey: key.publicKey, known: true, revokedAt: expect.any(Number) });
+      expect(text).not.toContain("signer@gmail.com");
+      expect(text.toLowerCase()).not.toContain("email");
+
+      const bad = await status("nope");
+      expect(bad.status).toBe(400);
+      expect(bad.headers.get("access-control-allow-origin")).toBe("*");
+      expect(userKeyStatus.OPTIONS().status).toBe(204);
+
+      registryError = new Error("redis down");
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const down = await status(key.publicKey);
+      expect(down.status).toBe(503);
+      expect(down.headers.get("access-control-allow-origin")).toBe("*");
+      warn.mockRestore();
+    });
+
+    it("rate limits the public key status per client IP", async () => {
+      const { userKeyStatus } = await routes();
+      const key = (await browserKey()).publicKey;
+      const hit = (ip: string): Promise<Response> =>
+        userKeyStatus.GET(new Request(`http://t/api/keys/user/${key}`, { headers: { "x-forwarded-for": ip } }), {
+          params: Promise.resolve({ key }),
+        });
+      for (let i = 0; i < 60; i++) expect((await hit("198.51.100.7")).status).toBe(200);
+      const blocked = await hit("198.51.100.7");
+      expect(blocked.status).toBe(429);
+      expect(blocked.headers.get("access-control-allow-origin")).toBe("*");
+      expect((await hit("198.51.100.8")).status).toBe(200);
+    });
+  });
+});
+
+describe("POST /api/verify: compact records, links and fileHash", () => {
+  const fileHex = sha256Hex("my file");
+
+  beforeEach(() => {
+    records.clear();
+    log = createMemoryLogStore();
+    recordPutError = null;
+    session.user = { email: "signer@gmail.com" };
+    stubServerKeys();
+  });
+
+  async function signed(): Promise<{ verify: Awaited<ReturnType<typeof routes>>["verify"]; record: SignatureRecord }> {
+    const { sign, verify } = await routes();
+    const res = await sign.POST(jsonRequest("http://t/api/sign", { fileHash: fileHex }));
+    const { record } = (await res.json()) as { record: SignatureRecord };
+    return { verify, record };
+  }
+
+  async function post(
+    verify: Awaited<ReturnType<typeof routes>>["verify"],
+    body: unknown
+  ): Promise<{ status: number; json: Record<string, unknown> }> {
+    const res = await verify.POST(jsonRequest("http://t/api/verify", body));
+    return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+  }
+
+  it("accepts a compact record string and a full verification link", async () => {
+    const { verify, record } = await signed();
+    const expected = { valid: true, keyId: record.k, userSigned: false, userKey: null, reason: null };
+    expect(await post(verify, { record: encodeRecord(record) })).toEqual({ status: 200, json: expected });
+    const url = createVerificationUrl(encodeRecord(record), "https://www.contentproof.app");
+    expect(await post(verify, { record: url })).toEqual({ status: 200, json: expected });
+    expect(await post(verify, { record: `  <${url}>\n` })).toEqual({ status: 200, json: expected });
+  });
+
+  it("verifies against fileHash when given, in either body form", async () => {
+    const { verify, record } = await signed();
+    const other = sha256Hex("a different file");
+    for (const base of [{ record: encodeRecord(record) }, record]) {
+      expect(await post(verify, { ...base, fileHash: fileHex })).toMatchObject({ status: 200, json: { valid: true } });
+      expect(await post(verify, { ...base, fileHash: fileHex.toUpperCase() })).toMatchObject({
+        status: 200,
+        json: { valid: true },
+      });
+      expect(await post(verify, { ...base, fileHash: other })).toEqual({
+        status: 200,
+        json: { valid: false, keyId: null, userSigned: false, userKey: null, reason: "hash-mismatch" },
+      });
+    }
+  });
+
+  it("still reports a forged compact record as unknown-key even with a matching fileHash", async () => {
+    const { verify } = await routes();
+    const rogue = makeKeyPair();
+    const t = Date.now();
+    const forged: SignatureRecord = {
+      v: 2,
+      k: keyIdFromSpkiBase64(rogue.publicKeyBase64),
+      h: hashHexToB64url(fileHex),
+      e: "ceo@gmail.com",
+      t,
+      s: rogue.signHex(buildSignedMessage(fileHex, "ceo@gmail.com", t)),
+    };
+    expect(await post(verify, { record: encodeRecord(forged), fileHash: fileHex })).toMatchObject({
+      status: 200,
+      json: { valid: false, reason: "unknown-key" },
+    });
+  });
+
+  it("returns 400 for an unparseable or legacy record string and a malformed fileHash", async () => {
+    const { verify, record } = await signed();
+    const garbage = await post(verify, { record: "garbage" });
+    expect(garbage.status).toBe(400);
+    expect(garbage.json.error).toMatch(/Invalid record/);
+    expect((await post(verify, { record: "" })).status).toBe(400);
+
+    const legacy = stringToBase64Url(JSON.stringify({ signature: "x", publicKey: "y", timestamp: 1 }));
+    const legacyRes = await post(verify, { record: legacy });
+    expect(legacyRes.status).toBe(400);
+    expect(legacyRes.json.error).toMatch(/legacy/i);
+
+    for (const fileHash of ["zz", fileHex.slice(1), 42, null]) {
+      for (const base of [{ record: encodeRecord(record) }, record]) {
+        const res = await post(verify, { ...base, fileHash });
+        expect(res.status).toBe(400);
+        expect(res.json.error).toMatch(/fileHash/);
+      }
+    }
+    expect((await post(verify, null)).status).toBe(400);
+    expect((await post(verify, { record: 5 })).status).toBe(400);
+    const huge = await post(verify, { record: `${encodeRecord(record)}${" ".repeat(5000)}` });
+    expect(huge.status).toBe(400);
+    expect(huge.json.error).toMatch(/Longer than/);
   });
 });

@@ -1,22 +1,72 @@
 // Google Analytics (GA4) helper for client-side usage.
 // Docs: https://developers.google.com/analytics/devguides/collection/ga4
-// Safe to import anywhere: it only touches `window` when an event is sent.
+// Safe to import anywhere: it only touches `window` and `document` when an
+// event is sent or GA is loaded.
 //
-// GA is only active on the production hostnames so localhost and preview
-// deployments stay out of reports. Elsewhere events are logged to the console.
+// GA is only active on the production hostnames, and only after the visitor
+// accepts the consent banner (src/components/ConsentBanner.tsx), so localhost,
+// preview deployments and visitors who decline stay out of reports. Elsewhere
+// events are logged to the console.
 
-export const GA_TRACKING_ID =
-  process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || "G-SXYXFW00DL";
+/** Measurement ID used when NEXT_PUBLIC_GA_MEASUREMENT_ID is not set at all. */
+export const DEFAULT_GA_TRACKING_ID = "G-SXYXFW00DL";
+
+/**
+ * Turns the raw NEXT_PUBLIC_GA_MEASUREMENT_ID into a measurement ID, or null
+ * when analytics is switched off. Unset keeps the default ID so the live site
+ * keeps reporting; an empty value or "off" disables GA entirely, which is how
+ * a fork opts out without editing code.
+ */
+export function resolveGaTrackingId(raw: string | undefined): string | null {
+  // An unset or empty value keeps the default, matching the old `||` fallback,
+  // so a deployment with an empty variable does not silently lose analytics.
+  const value = raw?.trim() ?? "";
+  if (value === "") return DEFAULT_GA_TRACKING_ID;
+  if (value.toLowerCase() === "off") return null;
+  return value;
+}
+
+/**
+ * The GA4 measurement ID, or null when analytics is disabled.
+ *
+ * GA only ever runs on the production hostnames below, and only once the
+ * visitor has accepted the consent banner. A fork that does not want GA at all
+ * sets NEXT_PUBLIC_GA_MEASUREMENT_ID to "off" (an empty value keeps the default); the banner
+ * then never renders and the gtag script is never requested.
+ */
+export const GA_TRACKING_ID: string | null = resolveGaTrackingId(
+  process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
+);
 
 export const PRODUCTION_HOSTNAMES: readonly string[] = [
   "www.contentproof.app",
   "contentproof.app",
 ];
 
-// Ensure TypeScript knows about the gtag function on window
+/** localStorage key holding the visitor's analytics choice. */
+export const CONSENT_STORAGE_KEY = "contentproof.analytics-consent.v1";
+
+/**
+ * Test-only escape hatch: when this localStorage key is "1" the consent banner
+ * renders on any hostname, so end-to-end tests can exercise it on localhost.
+ * GA itself still only loads on the production hostnames.
+ */
+export const FORCE_BANNER_STORAGE_KEY = "contentproof.analytics-consent.force-banner";
+
+export type AnalyticsConsent = "granted" | "denied";
+
+/** The subset of the Web Storage API the consent helpers need. */
+export interface ConsentStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+// Ensure TypeScript knows about the gtag globals. Both are absent until the
+// visitor consents on a production host, so callers must check before use.
 declare global {
   interface Window {
-    gtag: (...args: unknown[]) => void;
+    gtag?: (...args: unknown[]) => void;
+    dataLayer?: unknown[];
   }
 }
 
@@ -49,47 +99,164 @@ export function isProductionHost(hostname: string): boolean {
   return PRODUCTION_HOSTNAMES.includes(hostname);
 }
 
-function shouldSend(): boolean {
+/**
+ * Reads the stored analytics choice. Storage that is missing, throws (blocked
+ * site data, some private modes) or holds anything unexpected counts as no
+ * choice, which never loads GA.
+ */
+export function readConsent(storage: ConsentStorage | null): AnalyticsConsent | null {
+  if (!storage) return null;
+  try {
+    const value = storage.getItem(CONSENT_STORAGE_KEY);
+    return value === "granted" || value === "denied" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Stores the analytics choice. Returns false when storage is unavailable, in
+ * which case the choice only lasts for the current page.
+ */
+export function writeConsent(storage: ConsentStorage | null, consent: AnalyticsConsent): boolean {
+  if (!storage) return false;
+  try {
+    storage.setItem(CONSENT_STORAGE_KEY, consent);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** True when the test-only force-banner flag is set. Never throws. */
+export function readForceBanner(storage: ConsentStorage | null): boolean {
+  if (!storage) return false;
+  try {
+    return storage.getItem(FORCE_BANNER_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns window.localStorage, or null where touching it throws (sandboxed
+ * iframes and some privacy settings throw on the property access itself).
+ */
+export function browserStorage(): ConsentStorage | null {
+  try {
+    return typeof window !== "undefined" ? window.localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+export interface AnalyticsContext {
+  trackingId: string | null;
+  hostname: string;
+  consent: AnalyticsConsent | null;
+  forceBanner: boolean;
+}
+
+/** What the page should do about analytics for this visitor. */
+export type AnalyticsDecision = "load" | "banner" | "none";
+
+/**
+ * True when the decision depends on the visitor's region, so the caller must
+ * ask /api/consent-region first. Only an undecided visitor on a production
+ * host needs the lookup.
+ */
+export function needsRegionCheck(context: AnalyticsContext): boolean {
   return (
-    typeof window !== "undefined" &&
-    isProductionHost(window.location.hostname) &&
-    typeof window.gtag === "function"
+    context.trackingId !== null &&
+    context.consent === null &&
+    !context.forceBanner &&
+    isProductionHost(context.hostname)
   );
 }
 
 /**
+ * Decides whether to load GA, ask first, or do nothing.
+ *
+ * A stored choice always wins. Without one, on a production host, visitors
+ * from regions that require opt-in (see `consent-region.ts`) get the banner
+ * and everyone else gets GA as disclosed in the privacy policy. Off the
+ * production hosts GA never loads; the test-only force flag shows the banner.
+ */
+export function decideAnalytics(context: AnalyticsContext, consentRequired: boolean): AnalyticsDecision {
+  if (context.trackingId === null) return "none";
+  if (context.consent === "granted") return "load";
+  if (context.consent === "denied") return "none";
+  if (context.forceBanner) return "banner";
+  if (!isProductionHost(context.hostname)) return "none";
+  return consentRequired ? "banner" : "load";
+}
+
+/** Path of the endpoint that says whether this visitor must opt in. */
+export const CONSENT_REGION_PATH = "/api/consent-region";
+
+/**
+ * Asks the service whether this visitor must opt in before analytics loads.
+ * Any failure counts as "yes", so an outage shows the banner rather than
+ * loading GA without consent. Never throws.
+ */
+export async function fetchConsentRequired(fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  try {
+    const res = await fetchImpl(CONSENT_REGION_PATH, { cache: "no-store" });
+    if (!res.ok) return true;
+    const body: unknown = await res.json();
+    return !(typeof body === "object" && body !== null && (body as { consentRequired?: unknown }).consentRequired === false);
+  } catch {
+    return true;
+  }
+}
+
+const GTAG_SCRIPT_ID = "ga-gtag";
+
+/**
+ * Injects the gtag script and configures GA. Call only after consent. Does
+ * nothing off the production hostnames, when GA is disabled, or when GA is
+ * already loaded, so it is safe to call more than once.
+ */
+export function loadGoogleAnalytics(trackingId: string | null = GA_TRACKING_ID): void {
+  if (trackingId === null || typeof window === "undefined") return;
+  if (!isProductionHost(window.location.hostname)) return;
+  if (document.getElementById(GTAG_SCRIPT_ID)) return;
+
+  const dataLayer = (window.dataLayer = window.dataLayer ?? []);
+  // gtag.js expects the Arguments object itself, not an array copy.
+  window.gtag = function gtag(): void {
+    // eslint-disable-next-line prefer-rest-params
+    dataLayer.push(arguments);
+  };
+  window.gtag("js", new Date());
+  window.gtag("config", trackingId);
+
+  const script = document.createElement("script");
+  script.id = GTAG_SCRIPT_ID;
+  script.async = true;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(trackingId)}`;
+  document.head.appendChild(script);
+}
+
+/**
  * Sends a custom event to GA4. Off the production hostnames the event is
- * logged to the console instead. Never throws.
+ * logged to the console instead. On a production host without consent gtag is
+ * undefined and the call is a no-op. Never throws.
  */
 export function track<K extends keyof AnalyticsEvents>(
   eventName: K,
   params: AnalyticsEvents[K],
 ): void {
-  if (!shouldSend()) {
-    if (typeof window !== "undefined") {
-      console.log(`[Analytics Event]: ${eventName}`, params);
-    }
+  if (typeof window === "undefined") return;
+  if (!isProductionHost(window.location.hostname)) {
+    console.log(`[Analytics Event]: ${eventName}`, params);
     return;
   }
+  const gtag = window.gtag;
+  if (typeof gtag !== "function") return;
   try {
-    window.gtag("event", eventName, params);
+    gtag("event", eventName, params);
   } catch (error) {
     console.error(`[Analytics]: Failed to track event "${eventName}":`, error);
   }
-}
-
-/**
- * Inline script for the root layout: defines gtag everywhere (so calls never
- * throw) but only configures GA on the production hostnames.
- */
-export function gaInitScript(): string {
-  return `
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    // Only report production traffic; previews and localhost stay out of GA.
-    if (${JSON.stringify(PRODUCTION_HOSTNAMES)}.indexOf(location.hostname) !== -1) {
-      gtag('js', new Date());
-      gtag('config', '${GA_TRACKING_ID}');
-    }
-  `;
 }

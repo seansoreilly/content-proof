@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   RECORD_VERSION,
   buildSignedMessage,
@@ -8,6 +8,7 @@ import {
   extractPayloadFromUrl,
   hashB64urlToHex,
   hashHexToB64url,
+  isHashHex,
   parseRecordObject,
   type SignatureRecord,
 } from "@/lib/record";
@@ -67,6 +68,30 @@ describe("record codec", () => {
     expect(extractPayloadFromUrl("https://contentproof.app/verify")).toBeNull();
   });
 
+  describe("base URL from NEXT_PUBLIC_VERIFY_BASE_URL", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    });
+
+    it("treats an empty or blank value as unset and falls back to the page origin", () => {
+      vi.stubGlobal("window", { location: { origin: "https://www.contentproof.app" } });
+      const encoded = encodeRecord(sample);
+      for (const value of ["", "   "]) {
+        vi.stubEnv("NEXT_PUBLIC_VERIFY_BASE_URL", value);
+        expect(createVerificationUrl(encoded)).toBe(
+          `https://www.contentproof.app/verify#P=${encoded}`,
+        );
+      }
+    });
+
+    it("uses a configured value, trimmed and without a trailing slash", () => {
+      vi.stubEnv("NEXT_PUBLIC_VERIFY_BASE_URL", " https://verify.example/ ");
+      const encoded = encodeRecord(sample);
+      expect(createVerificationUrl(encoded)).toBe(`https://verify.example/verify#P=${encoded}`);
+    });
+  });
+
   it("keeps the QR link under the scannability budget for a 30-char email", () => {
     const encoded = encodeRecord({ ...sample, e: "thirty.character.email@gmail.com" });
     const url = createVerificationUrl(encoded, "https://contentproof.app");
@@ -107,5 +132,22 @@ describe("strict record object parsing", () => {
     expect(decodeRecord(wire.replace(`~${base.t}~`, "~1e12~"))).toBeNull();
     expect(decodeRecord(wire.replace(`~${base.t}~`, "~-1~"))).toBeNull();
     expect(decodeRecord(wire.replace(`~${base.t}~`, "~99999999999999999999~"))).toBeNull();
+  });
+});
+
+describe("isHashHex", () => {
+  it("accepts 64 hex characters in either case", () => {
+    expect(isHashHex("a".repeat(64))).toBe(true);
+    expect(isHashHex("0123456789abcdefABCDEF".padEnd(64, "0"))).toBe(true);
+    expect(isHashHex(sha256Hex("x").toUpperCase())).toBe(true);
+  });
+
+  it("rejects wrong lengths, non-hex characters and non-strings", () => {
+    for (const bad of ["", "a".repeat(63), "a".repeat(65), "g".repeat(64), ` ${"a".repeat(63)}`, `${"a".repeat(64)}\n`]) {
+      expect(isHashHex(bad)).toBe(false);
+    }
+    for (const bad of [undefined, null, 42, ["a".repeat(64)], { length: 64 }]) {
+      expect(isHashHex(bad)).toBe(false);
+    }
   });
 });

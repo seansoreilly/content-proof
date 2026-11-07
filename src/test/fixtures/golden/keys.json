@@ -1,0 +1,45 @@
+{
+  "notice": "TEST-ONLY key derived from a public seed. NOT SECRET. Never configure it on a real deployment.",
+  "service": {
+    "role": "current service key",
+    "notice": "TEST-ONLY key derived from a public seed. NOT SECRET. Never configure it on a real deployment.",
+    "seedLabel": "contentproof-golden-fixture/service-key-current",
+    "keyId": "gHCAcnlKRXmwM7bQ",
+    "publicKeySpkiBase64": "MCowBQYDK2VwAyEA6bdYSjDnkDUNRlCmBllpRiGNiLTd3Dr7xvudGgdiT4I="
+  },
+  "rotatedOut": {
+    "role": "service key rotated out but still published",
+    "notice": "TEST-ONLY key derived from a public seed. NOT SECRET. Never configure it on a real deployment.",
+    "seedLabel": "contentproof-golden-fixture/service-key-rotated-out",
+    "keyId": "k4hS0LUx2v7gXIJI",
+    "publicKeySpkiBase64": "MCowBQYDK2VwAyEATN6X2COdmI08u3X5K4IgZDdgPiNW8OuY1VNndknnE1Q="
+  },
+  "unpublished": {
+    "role": "service key that was never published (for the unknown-key fixture)",
+    "notice": "TEST-ONLY key derived from a public seed. NOT SECRET. Never configure it on a real deployment.",
+    "seedLabel": "contentproof-golden-fixture/service-key-never-published",
+    "keyId": "FvSi4igoyTINvPf2",
+    "publicKeySpkiBase64": "MCowBQYDK2VwAyEA7hUzLAgDBJnrqeiWwPztJEJjsV746zO+OI/7UIMfLTU="
+  },
+  "user": {
+    "role": "account holder's browser key (v3 records)",
+    "notice": "TEST-ONLY key derived from a public seed. NOT SECRET. Never configure it on a real deployment.",
+    "seedLabel": "contentproof-golden-fixture/user-browser-key",
+    "publicKeyRawBase64Url": "kkQhZMNhdQPc6TO60ZmyCTrXBYsM7FXg_GhDTYcG2fM"
+  },
+  "publicKeysDocument": {
+    "current": "gHCAcnlKRXmwM7bQ",
+    "keys": {
+      "gHCAcnlKRXmwM7bQ": {
+        "keyId": "gHCAcnlKRXmwM7bQ",
+        "algorithm": "Ed25519",
+        "publicKey": "MCowBQYDK2VwAyEA6bdYSjDnkDUNRlCmBllpRiGNiLTd3Dr7xvudGgdiT4I="
+      },
+      "k4hS0LUx2v7gXIJI": {
+        "keyId": "k4hS0LUx2v7gXIJI",
+        "algorithm": "Ed25519",
+        "publicKey": "MCowBQYDK2VwAyEATN6X2COdmI08u3X5K4IgZDdgPiNW8OuY1VNndknnE1Q="
+      }
+    }
+  }
+}

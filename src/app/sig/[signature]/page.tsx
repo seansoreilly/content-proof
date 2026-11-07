@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
-import { encodeRecord } from "@/lib/record";
+import { createVerificationUrl, encodeRecord, isSignatureString } from "@/lib/record";
 import { getLogStore, getRecordStore } from "@/lib/redis";
 import { rimTextFor } from "@/lib/seal-image";
+import { resolveSiteOrigin } from "@/lib/site-origin";
 import { Seal } from "@/components/Seal";
 import { Button, RecordSummary } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Record" };
 
 export const dynamic = "force-dynamic";
-
-const SIGNATURE_RE = /^[A-Za-z0-9_-]{86}$/;
 
 /**
  * Public page for one issued record: what was attested, by which key, and
@@ -25,7 +25,7 @@ export default async function RecordPage({
   params: Promise<{ signature: string }>;
 }): Promise<React.JSX.Element> {
   const { signature } = await params;
-  if (!SIGNATURE_RE.test(signature)) notFound();
+  if (!isSignatureString(signature)) notFound();
 
   const record = await getRecordStore().get(signature).catch(() => null);
   if (!record) notFound();
@@ -33,9 +33,15 @@ export default async function RecordPage({
   const logIndex = await getLogStore().indexOf(signature).catch(() => null);
   const encoded = encodeRecord(record);
   const verifyHref = `/verify#P=${encoded}`;
+  // The QR code leaves the page, so it needs an absolute URL a phone can open.
+  const origin = resolveSiteOrigin(
+    { NEXT_PUBLIC_VERIFY_BASE_URL: process.env.NEXT_PUBLIC_VERIFY_BASE_URL },
+    await headers()
+  );
+  const verifyUrl = createVerificationUrl(encoded, origin);
 
   // qrcode's default modules are black on white, which is what the seal requires.
-  const qrDataUrl = await QRCode.toDataURL(verifyHref, {
+  const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
     width: 512,
     errorCorrectionLevel: "M",
     margin: 1,

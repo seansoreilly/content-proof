@@ -103,6 +103,15 @@ export function isRawPublicKey(value: unknown): value is string {
   }
 }
 
+/**
+ * True for a SHA-256 digest written as 64 hex characters, in either case.
+ * Clients may send uppercase hex; callers lowercase before signing.
+ */
+export function isHashHex(value: unknown): value is string {
+  return typeof value === "string" && HASH_HEX_RE.test(value);
+}
+
+/** True for a well-formed base64url Ed25519 signature (64 bytes, 86 characters). */
 export function isSignatureString(value: unknown): value is string {
   return typeof value === "string" && SIGNATURE_RE.test(value);
 }
@@ -186,10 +195,12 @@ const FRAGMENT_PARAM = "P";
  * the payload never lands in request logs.
  */
 export function createVerificationUrl(encodedRecord: string, baseUrl?: string): string {
+  // An empty or blank NEXT_PUBLIC_VERIFY_BASE_URL (as .env.example ships it)
+  // counts as unset, so QR codes never carry a relative link.
   const base =
     baseUrl ??
-    process.env.NEXT_PUBLIC_VERIFY_BASE_URL ??
-    (typeof window !== "undefined" ? window.location.origin : "");
+    (process.env.NEXT_PUBLIC_VERIFY_BASE_URL?.trim() ||
+      (typeof window !== "undefined" ? window.location.origin : ""));
   return `${base.replace(/\/$/, "")}/verify#${FRAGMENT_PARAM}=${encodedRecord}`;
 }
 

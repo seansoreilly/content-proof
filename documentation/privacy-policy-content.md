@@ -128,14 +128,17 @@ storage is not configured, nothing is retained after the response is sent.
   invalidate QR codes or links already shared, because they are
   self-contained, and it does not remove the record's hash from the
   transparency log, which is append-only.
-- **Opt out of analytics**: Block the Google Analytics script in your browser
-  (an ad or tracker blocker does this).
+- **Opt out of analytics**: In the EU, EEA, UK and Switzerland, analytics
+  only runs if you accept the consent banner. Anywhere, you can block the
+  Google Analytics script in your browser (an ad or tracker blocker does this).
 
 ### Data Portability
 - **Records**: The record in your QR code, seal image or link is the
   complete, portable form of your data; keep copies for offline
   verification.
-- There is no separate signature history or export feature.
+- **Account page**: Signed in, the Account page lists the records issued to
+  your account (while they are stored) and the browser signing keys you have
+  used, and lets you revoke a key.
 
 ## Cookies and Tracking
 
@@ -145,7 +148,14 @@ storage is not configured, nothing is retained after the response is sent.
 
 ### Analytics
 - **Google Analytics**: Sets its own cookies to measure usage
-- **Opt-out available**: Block the analytics script in your browser
+- **Consent where required**: Visitors in the EU, EEA, UK and Switzerland (or
+  whose location cannot be determined) are asked first, and Google Analytics
+  loads only if they accept. Your region is worked out from your IP address
+  by our hosting provider for this purpose only; we do not store it. Your
+  choice is kept in your browser's local storage.
+- **Elsewhere**: Google Analytics loads as described in this policy
+- **Opt-out available**: Decline the banner where shown, or block the
+  analytics script in your browser
 
 ### No Advertising
 We do not use cookies for advertising or tracking for marketing purposes.

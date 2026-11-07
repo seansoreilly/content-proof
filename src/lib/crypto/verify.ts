@@ -1,4 +1,4 @@
-import * as nacl from "tweetnacl";
+import { ed25519 } from "@noble/curves/ed25519.js";
 import { base64ToBytes, fromBase64Url, utf8ToBytes } from "@/lib/base64";
 import {
   findPublicKey,
@@ -44,12 +44,22 @@ function spkiBase64ToRawKey(spkiBase64: string): Uint8Array {
   return der.slice(-32);
 }
 
+/**
+ * Verify with RFC 8032 strict rules (`zip215: false`). noble defaults ed25519
+ * to ZIP-215, a looser consensus-oriented rule set that accepts non-canonical
+ * point encodings. Strict mode instead requires canonical encodings of R and
+ * the public key, rejects S >= L (so signatures are not malleable), and
+ * rejects small-order public keys. That is at least as strict as tweetnacl.
+ * node:crypto (OpenSSL) on the server and WebCrypto in the browser only emit
+ * canonical signatures from properly generated keys, so every signature the
+ * app produces still verifies. Never throws: malformed input is just invalid.
+ */
 function verifyDetached(message: string | Uint8Array, signatureBase64Url: string, rawKey: Uint8Array): boolean {
   try {
     const msg = typeof message === "string" ? utf8ToBytes(message) : message;
     const signature = fromBase64Url(signatureBase64Url);
     if (signature.length !== 64 || rawKey.length !== 32) return false;
-    return nacl.sign.detached.verify(msg, signature, rawKey);
+    return ed25519.verify(signature, msg, rawKey, { zip215: false });
   } catch {
     return false;
   }
