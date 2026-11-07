@@ -158,6 +158,19 @@ describe("test accounts outside a preview", () => {
     vi.stubEnv("VERCEL_ENV", "production");
     expect((await call({ previewTest: true, email: session.user.email })).user).toBeUndefined();
     expect((await call({ email: session.user.email })).user).toBeUndefined();
+    // Case does not smuggle a test address past the check.
+    expect((await call({ email: session.user.email.toUpperCase() })).user).toBeUndefined();
+    // The marker alone is enough, whatever address the token carries.
+    expect((await call({ previewTest: true, email: "someone@gmail.com" })).user).toBeUndefined();
+    // Not a preview: unset, development, or any other value.
+    for (const env of ["", "development", "Preview"]) {
+      vi.stubEnv("VERCEL_ENV", env);
+      expect((await call({ previewTest: true, email: session.user.email })).user, env).toBeUndefined();
+    }
+    // An ordinary token on production keeps its user (the user comes from the
+    // session fixture; the token decides whether it survives).
+    vi.stubEnv("VERCEL_ENV", "production");
+    expect((await call({ email: "someone@gmail.com", allowed: true })).user).toMatchObject({ allowed: true });
 
     vi.stubEnv("VERCEL_ENV", "preview");
     expect((await call({ previewTest: true, email: session.user.email, allowed: true })).user).toMatchObject({

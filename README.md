@@ -446,9 +446,70 @@ export E2E_BASE_URL=https://<project>-git-<branch>-<team>.vercel.app
 export E2E_AUTH_PROVIDER=preview-test
 export E2E_AUTH_SECRET=<PREVIEW_TEST_AUTH_SECRET>
 export E2E_VERCEL_BYPASS=<protection bypass secret>
-npx vitest run src/e2e          # API flow: sign, verify, log proofs
+npx vitest run src/e2e          # all the API tests below
 node scripts/e2e-browser.mjs    # browser flow: upload, verify, account, revoke
 ```
+
+`src/e2e` holds three files, sharing sign-in and request helpers in
+`src/e2e/helpers.ts`:
+
+- `server.e2e.test.ts`: the main flow. Sign in, sign v2 and v3 records,
+  verify them with the published keys and `/api/verify`, reject a forgery,
+  and check log proofs.
+- `concurrency.e2e.test.ts`: concurrent v2/v3 signing (3 accounts × 10
+  requests) gives distinct signatures and log indexes, and every inclusion
+  proof and log entry matches. Also checks that exactly 30 signs per account
+  per minute succeed and the 31st gets 429. No sign that starts after a key's
+  revocation is answered succeeds, and a revoke racing a signing touch leaves
+  the key revoked.
+- `auth.e2e.test.ts`: `/api/sign` and `/api/account/*` return 401 with no
+  cookie, a garbage token, a token encrypted with the wrong secret, or an
+  expired one. CSRF is checked on next-auth's callback and sign-out. Non-JSON
+  bodies to `/api/sign` and `/api/account/keys/revoke` get 415. One account
+  cannot revoke, list or sign with another account's key. No public endpoint
+  returns an email address. 2 MB bodies get 413, and `fileHash` validation is
+  checked.
+
+Optional extras: `E2E_NEXTAUTH_SECRET` (the server's `NEXTAUTH_SECRET`) also
+mints an expired but genuine session token for the 401 checks. Unit tests in
+`src/app/api/session-auth.test.ts` cover the same cases without a server.
+
+The `preview-test` login names accounts, so these tests sign in several fresh
+accounts per run. With the `debug` provider there is one account: the
+rate-limit, revocation-race and cross-account tests skip, and the concurrent
+burst shrinks to 18 requests, because that account's 30-per-minute signing
+budget is shared with the other files. Wait a minute between debug runs.
+
+A run signs in 8 times. The preview login allows 10 attempts per address per
+minute, so on a preview wait a minute between runs. Against a local server
+each file sends its own `x-forwarded-for`, which spreads the logins across
+separate buckets.
+
+To run everything locally against a production build, with the preview login
+enabled (in-memory storage):
+
+```bash
+npm run build
+VERCEL_ENV=preview PREVIEW_TEST_AUTH_SECRET=<32+ chars> PREVIEW_TEST_AUTH_ISOLATED=yes \
+  NEXTAUTH_SECRET=<any> NEXTAUTH_URL=http://localhost:3000 \
+  ED25519_PRIVATE_KEY=<non-production> ED25519_PUBLIC_KEY=<non-production> \
+  npx next start -p 3000
+E2E_BASE_URL=http://localhost:3000 E2E_AUTH_PROVIDER=preview-test \
+  E2E_AUTH_SECRET=<same> E2E_NEXTAUTH_SECRET=<same> npx vitest run src/e2e
+```
+
+The login also fetches the live production key document to make sure the
+local key is not a production key, so it needs outbound HTTPS.
+
+#### CSRF protection on the JSON endpoints
+
+`/api/sign` and `/api/account/keys/revoke` act on the session cookie, which
+next-auth sets `HttpOnly` and `SameSite=Lax`, so a cross-site POST does not
+carry it in current browsers. These endpoints also require
+`Content-Type: application/json`, and anything else gets 415. A cross-site
+page cannot send that type without a CORS preflight, which these same-origin
+endpoints never answer. Bodies over 64 KB get 413 there and on
+`/api/verify`. `/api/verify` uses no cookie and accepts any content type.
 
 The browser script needs Playwright (`npm i --no-save playwright && npx
 playwright install chromium`). Set `E2E_SCREENSHOTS=<dir>` to keep a
