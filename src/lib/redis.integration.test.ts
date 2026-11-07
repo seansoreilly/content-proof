@@ -371,11 +371,36 @@ describe.skipIf(!redisIntegrationEnabled)("Redis integration (real Redis via the
       expect(await registry.lookup(key)).toEqual({ email: "frank@example.com", revokedAt: BASE_TIME + 1_000 });
 
       const again = await registry.revoke("frank@example.com", key, BASE_TIME + 3_000);
+      expect(again).not.toBeNull();
       expect(again?.revokedAt).toBe(BASE_TIME + 1_000);
       expect(await registry.list("frank@example.com")).toEqual([
         { publicKey: key, firstSeen: BASE_TIME, lastSeen: BASE_TIME, revokedAt: BASE_TIME + 1_000 },
       ]);
       expect(await registry.lookup(key)).toEqual({ email: "frank@example.com", revokedAt: BASE_TIME + 1_000 });
+    });
+
+    it("answers the public status endpoint from Redis without revealing the account", async () => {
+      // The route reaches the registry through getRedis(), configured from the environment.
+      vi.stubEnv("UPSTASH_REDIS_REST_URL", process.env.REDIS_TEST_URL ?? "");
+      vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", process.env.REDIS_TEST_TOKEN ?? "");
+      vi.resetModules();
+      const route = await import("@/app/api/keys/user/[key]/route");
+      const registry = createRedisUserKeyRegistry(redis);
+      const [active, revoked, unknown] = [randomPublicKey(), randomPublicKey(), randomPublicKey()];
+      await registry.touch("grace@example.com", active, BASE_TIME);
+      await registry.touch("grace@example.com", revoked, BASE_TIME);
+      await registry.revoke("grace@example.com", revoked, BASE_TIME + 500);
+
+      const status = async (key: string): Promise<unknown> => {
+        const res = await route.GET(new Request(`http://t/api/keys/user/${key}`), { params: Promise.resolve({ key }) });
+        expect(res.status).toBe(200);
+        return res.json();
+      };
+      expect(await status(active)).toEqual({ publicKey: active, known: true, revokedAt: null });
+      expect(await status(revoked)).toEqual({ publicKey: revoked, known: true, revokedAt: BASE_TIME + 500 });
+      expect(await status(unknown)).toEqual({ publicKey: unknown, known: false, revokedAt: null });
+      // Its rate limit counted in Redis too.
+      expect(await redis.get("rl:user-key:unknown")).toBe(3);
     });
   });
 
