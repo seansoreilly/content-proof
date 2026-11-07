@@ -1,10 +1,12 @@
+import { sign } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Redis } from "@upstash/redis";
 import { bytesToHex } from "@/lib/base64";
-import { buildPublicKeysJson } from "@/lib/keys";
+import { buildPublicKeysJson, getSigningKeyPair } from "@/lib/keys";
 import { buildConsistencyProof, buildInclusionProof, buildSignedLogHead } from "@/lib/log-head";
-import { createRedisLogStore } from "@/lib/log-store";
+import { BACKFILL_SCRIPT, createRedisLogStore } from "@/lib/log-store";
 import {
+  logHeadMessage,
   recordLeafHash,
   verifyConsistencyResponse,
   verifyInclusionProof,
@@ -19,6 +21,7 @@ import { createRedisUserKeyRegistry } from "@/lib/user-key-registry";
 import { makeKeyPair, stubServerKeys } from "@/test/fixtures";
 import {
   BASE_TIME,
+  countEvals,
   rawTestRedis,
   redisIntegrationEnabled,
   signedRecord,
@@ -35,12 +38,42 @@ import {
  */
 const pair = makeKeyPair();
 
+function leafHex(record: SignatureRecord): string {
+  return bytesToHex(recordLeafHash(record));
+}
+
 function referenceRoot(records: SignatureRecord[]): string {
   return bytesToHex(computeRoot(records.map(recordLeafHash)));
 }
 
 function randomPublicKey(): string {
   return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
+}
+
+/** The append script of the code before `log:leaves` existed, verbatim. */
+const OLD_APPEND_SCRIPT = `
+local length = redis.call('RPUSH', KEYS[1], ARGV[1])
+redis.call('SET', KEYS[2], tostring(length - 1))
+return length
+`;
+
+async function oldAppend(redis: Redis, record: SignatureRecord): Promise<number> {
+  const length = await redis.eval<[string], number>(OLD_APPEND_SCRIPT, ["log:records", `logidx:${record.s}`], [
+    JSON.stringify(record),
+  ]);
+  return Number(length) - 1;
+}
+
+/** A head as the previous code would have signed it, from the records alone. */
+function signReferenceHead(records: SignatureRecord[], timestamp: number): SignedLogHead {
+  const root = referenceRoot(records);
+  const { privateKey, keyId } = getSigningKeyPair();
+  const signature = sign(null, Buffer.from(logHeadMessage(records.length, root, timestamp), "utf8"), privateKey);
+  return { size: records.length, root, timestamp, keyId, signature: signature.toString("base64url") };
+}
+
+async function storedLeaves(redis: Redis): Promise<string[]> {
+  return redis.lrange<string>("log:leaves", 0, -1);
 }
 
 describe.skipIf(!redisIntegrationEnabled)("Redis integration (real Redis via the Upstash REST protocol)", () => {
@@ -343,6 +376,166 @@ describe.skipIf(!redisIntegrationEnabled)("Redis integration (real Redis via the
         { publicKey: key, firstSeen: BASE_TIME, lastSeen: BASE_TIME, revokedAt: BASE_TIME + 1_000 },
       ]);
       expect(await registry.lookup(key)).toEqual({ email: "frank@example.com", revokedAt: BASE_TIME + 1_000 });
+    });
+  });
+
+  /**
+   * Upgrading a Redis log written before leaf hashes were stored. The
+   * previous code kept only `log:records` and `logidx:<sig>`; the current
+   * code adds `log:leaves` and backfills it lazily from the records. These
+   * tests seed Redis exactly as the previous code wrote it and check the
+   * backfill, its races, and a rolling deploy where old and new code append
+   * side by side.
+   */
+  describe("upgrade from a log written before leaf hashes", () => {
+    let old: SignatureRecord[];
+
+    beforeEach(async () => {
+      old = Array.from({ length: 25 }, (_, i) => signedRecord(i));
+      for (const [i, record] of old.entries()) expect(await oldAppend(redis, record)).toBe(i);
+      expect(await redis.exists("log:leaves")).toBe(0);
+    });
+
+    it("backfills log:leaves exactly once, on the first read", async () => {
+      const counted = countEvals(redis);
+      const store = createRedisLogStore(counted.redis);
+
+      const head = await buildSignedLogHead(store);
+      expect(head.size).toBe(25);
+      expect(head.root).toBe(referenceRoot(old));
+      expect(verifyLogHead(head, buildPublicKeysJson())).toBe(true);
+      expect(await storedLeaves(redis)).toEqual(old.map(leafHex));
+      expect(counted.scripts.filter((s) => s === BACKFILL_SCRIPT)).toHaveLength(1);
+
+      // Later reads, by this store or a fresh one, find the list complete.
+      await buildSignedLogHead(store);
+      expect((await store.leafHashes(0, 25)).map(bytesToHex)).toEqual(old.map(leafHex));
+      const second = countEvals(testRedis());
+      expect((await createRedisLogStore(second.redis).leafHashes(0, 25)).map(bytesToHex)).toEqual(old.map(leafHex));
+      expect(counted.scripts.filter((s) => s === BACKFILL_SCRIPT)).toHaveLength(1);
+      expect(second.scripts).toEqual([]);
+      expect(await redis.llen("log:leaves")).toBe(25);
+    });
+
+    it("produces no duplicate leaves when many first reads race, across processes", async () => {
+      const storeA = createRedisLogStore(redis);
+      const storeB = createRedisLogStore(testRedis());
+      const storeC = createRedisLogStore(testRedis());
+
+      const [heads, leavesB, leavesC, headB] = await Promise.all([
+        Promise.all(Array.from({ length: 10 }, (_, i) => buildSignedLogHead(storeA, BASE_TIME + i))),
+        // Direct reads skip log-head's per-store queue, so these race in the Lua guard itself.
+        Promise.all(Array.from({ length: 5 }, () => storeB.leafHashes(0, 25))),
+        Promise.all(Array.from({ length: 5 }, () => storeC.leafHashes(3, 22))),
+        buildSignedLogHead(storeB),
+      ]);
+
+      const root = referenceRoot(old);
+      for (const head of [...heads, headB]) {
+        expect(head.size).toBe(25);
+        expect(head.root).toBe(root);
+      }
+      for (const leaves of leavesB) expect(leaves.map(bytesToHex)).toEqual(old.map(leafHex));
+      for (const leaves of leavesC) expect(leaves.map(bytesToHex)).toEqual(old.slice(3).map(leafHex));
+      expect(await storedLeaves(redis)).toEqual(old.map(leafHex));
+    });
+
+    it("keeps the lists in step on appends after the backfill", async () => {
+      const store = createRedisLogStore(redis);
+      await buildSignedLogHead(store);
+      const added = Array.from({ length: 4 }, (_, i) => signedRecord(100 + i));
+      for (const [i, record] of added.entries()) expect(await store.append(record)).toBe(25 + i);
+
+      const all = [...old, ...added];
+      expect(await redis.llen("log:records")).toBe(29);
+      expect(await storedLeaves(redis)).toEqual(all.map(leafHex));
+      expect((await buildSignedLogHead(store)).root).toBe(referenceRoot(all));
+      for (const [i, record] of all.entries()) expect(await store.indexOf(record.s)).toBe(i);
+    });
+
+    it("proves a head signed before the upgrade consistent with the head after new appends", async () => {
+      const keys = buildPublicKeysJson();
+      const before = signReferenceHead(old, BASE_TIME);
+      expect(verifyLogHead(before, keys)).toBe(true);
+
+      const store = createRedisLogStore(redis);
+      const added = Array.from({ length: 6 }, (_, i) => signedRecord(200 + i));
+      for (const record of added) await store.append(record);
+
+      const result = await buildConsistencyProof(store, before.size);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.response.head.size).toBe(31);
+      expect(result.response.head.root).toBe(referenceRoot([...old, ...added]));
+      expect(verifyConsistencyResponse(before, result.response, keys)).toBe(true);
+      expect(await storedLeaves(redis)).toEqual([...old, ...added].map(leafHex));
+    });
+
+    /**
+     * Mid rolling deploy, an old-code process appends after the backfill, so
+     * its records have no leaf. `log:leaves` must never hold a hash at the
+     * wrong index: new-code appends stop pushing leaves while the list lags
+     * (it is only ever a correct prefix), and the next read catches it up
+     * from the records. Roots stay correct throughout.
+     */
+    it("recovers when old code appends without leaves after the backfill", async () => {
+      const keys = buildPublicKeysJson();
+      const store = createRedisLogStore(redis);
+      const otherProcess = createRedisLogStore(testRedis());
+      const beforeDeploy = await buildSignedLogHead(store);
+      expect(await redis.llen("log:leaves")).toBe(25);
+
+      const fromOld = [signedRecord(300), signedRecord(301)];
+      expect(await oldAppend(redis, fromOld[0])).toBe(25);
+      expect(await oldAppend(redis, fromOld[1])).toBe(26);
+      const fromNew = signedRecord(302);
+      expect(await store.append(fromNew)).toBe(27);
+
+      // The lagging list stayed a correct prefix rather than taking the new leaf at index 25.
+      expect(await storedLeaves(redis)).toEqual(old.map(leafHex));
+
+      const all = [...old, ...fromOld, fromNew];
+      // The warm store (cached tree at 25) and a cold one both see the right tree.
+      const warm = await buildSignedLogHead(store);
+      const cold = await buildSignedLogHead(otherProcess);
+      expect(warm.root).toBe(referenceRoot(all));
+      expect(cold.root).toBe(warm.root);
+      expect(await storedLeaves(redis)).toEqual(all.map(leafHex));
+
+      const result = await buildConsistencyProof(store, beforeDeploy.size);
+      if (!result.ok) throw new Error(result.error);
+      expect(verifyConsistencyResponse(beforeDeploy, result.response, keys)).toBe(true);
+
+      // Once caught up, new appends push leaves again.
+      const next = signedRecord(303);
+      expect(await store.append(next)).toBe(28);
+      expect(await storedLeaves(redis)).toEqual([...all, next].map(leafHex));
+    });
+
+    it("serves correct leaves for a range that starts past the end of a lagging list", async () => {
+      const store = createRedisLogStore(redis);
+      await store.leafHashes(0, 25);
+      const fromOld = [signedRecord(400), signedRecord(401), signedRecord(402)];
+      for (const record of fromOld) await oldAppend(redis, record);
+
+      // Cannot be persisted (it would leave a gap), but must still be right.
+      expect((await store.leafHashes(27, 1)).map(bytesToHex)).toEqual([leafHex(fromOld[2])]);
+      expect(await redis.llen("log:leaves")).toBe(25);
+      expect((await store.leafHashes(24, 4)).map(bytesToHex)).toEqual([old[24], ...fromOld].map(leafHex));
+      expect(await storedLeaves(redis)).toEqual([...old, ...fromOld].map(leafHex));
+    });
+
+    it("backfills a long pre-upgrade log in chunks and pages", async () => {
+      // 1,230 entries: past the 500-hash backfill chunk and log-head's 1,000-leaf page.
+      const many = Array.from({ length: 1_205 }, (_, i) => signedRecord(1_000 + i));
+      for (let i = 0; i < many.length; i += 200) {
+        const batch = many.slice(i, i + 200);
+        await redis.rpush("log:records", ...batch.map((r) => JSON.stringify(r)));
+      }
+      const all = [...old, ...many];
+      const head = await buildSignedLogHead(createRedisLogStore(redis));
+      expect(head.size).toBe(1_230);
+      expect(head.root).toBe(referenceRoot(all));
+      expect(await storedLeaves(redis)).toEqual(all.map(leafHex));
     });
   });
 });
