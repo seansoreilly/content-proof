@@ -8,34 +8,46 @@ import {
   browserStorage,
   loadGoogleAnalytics,
   readConsent,
+  decideAnalytics,
+  fetchConsentRequired,
+  needsRegionCheck,
   readForceBanner,
-  shouldShowConsentBanner,
   writeConsent,
+  type AnalyticsContext,
   type AnalyticsConsent,
 } from "@/lib/analytics";
 
 /**
- * Asks for analytics consent on the production hostnames and loads Google
- * Analytics only once the visitor accepts. A stored "granted" loads GA on
- * later visits without asking again; a stored "denied" keeps the banner hidden
- * and GA unloaded. Everything runs after mount, so the server render is empty
- * and hydration never mismatches.
+ * Loads Google Analytics on the production hostnames, asking first where the
+ * visitor's region requires opt-in (EU, EEA, UK, Switzerland; see
+ * `consent-region.ts`). A stored choice always wins: "granted" loads GA
+ * without asking again, "denied" keeps it unloaded. Everyone else gets GA as
+ * disclosed in the privacy policy. Everything runs after mount, so the server
+ * render is empty, pages stay static and hydration never mismatches.
  */
 export function ConsentBanner(): ReactElement | null {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const storage = browserStorage();
-    const consent = readConsent(storage);
-    if (consent === "granted") loadGoogleAnalytics();
-    setVisible(
-      shouldShowConsentBanner({
-        trackingId: GA_TRACKING_ID,
-        hostname: window.location.hostname,
-        consent,
-        forceBanner: readForceBanner(storage),
-      }),
-    );
+    const context: AnalyticsContext = {
+      trackingId: GA_TRACKING_ID,
+      hostname: window.location.hostname,
+      consent: readConsent(storage),
+      forceBanner: readForceBanner(storage),
+    };
+    const apply = (consentRequired: boolean): void => {
+      if (cancelled) return;
+      const decision = decideAnalytics(context, consentRequired);
+      if (decision === "load") loadGoogleAnalytics();
+      setVisible(decision === "banner");
+    };
+    if (needsRegionCheck(context)) void fetchConsentRequired().then(apply);
+    else apply(true);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const choose = (consent: AnalyticsConsent): void => {

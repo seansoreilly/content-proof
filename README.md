@@ -323,10 +323,14 @@ Optional:
 - `NEXT_PUBLIC_VERIFY_BASE_URL`: base URL used in QR codes.
 - `NEXT_PUBLIC_GA_MEASUREMENT_ID`: Google Analytics measurement ID. Unset or empty
   uses ContentProof's own ID; set it to `off` to disable GA in a fork. GA only ever loads on the production hostnames (`contentproof.app`,
-  `www.contentproof.app`), and only after the visitor accepts the consent
-  banner. The choice is stored in the browser's localStorage under
-  `contentproof.analytics-consent.v1`; declining keeps the gtag script from
-  loading at all.
+  `www.contentproof.app`). Visitors in the EU, EEA, UK and Switzerland, or
+  whose country is unknown, see a consent banner first and GA loads only if
+  they accept; everyone else gets GA as disclosed in the privacy policy. The
+  region comes from `GET /api/consent-region` (`{consentRequired}`, from
+  Vercel's `x-vercel-ip-country` header; the list is in
+  `src/lib/consent-region.ts`). A choice is stored in localStorage under
+  `contentproof.analytics-consent.v1`, and declining keeps the gtag script
+  from loading at all.
 
 ## Scripts
 

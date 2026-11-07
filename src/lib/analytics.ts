@@ -150,19 +150,64 @@ export function browserStorage(): ConsentStorage | null {
   }
 }
 
-/**
- * Decides whether the consent banner should render: only when GA is enabled,
- * no choice is stored, and the page is on a production host (or the test-only
- * force flag is set).
- */
-export function shouldShowConsentBanner(options: {
+export interface AnalyticsContext {
   trackingId: string | null;
   hostname: string;
   consent: AnalyticsConsent | null;
   forceBanner: boolean;
-}): boolean {
-  if (options.trackingId === null || options.consent !== null) return false;
-  return options.forceBanner || isProductionHost(options.hostname);
+}
+
+/** What the page should do about analytics for this visitor. */
+export type AnalyticsDecision = "load" | "banner" | "none";
+
+/**
+ * True when the decision depends on the visitor's region, so the caller must
+ * ask /api/consent-region first. Only an undecided visitor on a production
+ * host needs the lookup.
+ */
+export function needsRegionCheck(context: AnalyticsContext): boolean {
+  return (
+    context.trackingId !== null &&
+    context.consent === null &&
+    !context.forceBanner &&
+    isProductionHost(context.hostname)
+  );
+}
+
+/**
+ * Decides whether to load GA, ask first, or do nothing.
+ *
+ * A stored choice always wins. Without one, on a production host, visitors
+ * from regions that require opt-in (see `consent-region.ts`) get the banner
+ * and everyone else gets GA as disclosed in the privacy policy. Off the
+ * production hosts GA never loads; the test-only force flag shows the banner.
+ */
+export function decideAnalytics(context: AnalyticsContext, consentRequired: boolean): AnalyticsDecision {
+  if (context.trackingId === null) return "none";
+  if (context.consent === "granted") return "load";
+  if (context.consent === "denied") return "none";
+  if (context.forceBanner) return "banner";
+  if (!isProductionHost(context.hostname)) return "none";
+  return consentRequired ? "banner" : "load";
+}
+
+/** Path of the endpoint that says whether this visitor must opt in. */
+export const CONSENT_REGION_PATH = "/api/consent-region";
+
+/**
+ * Asks the service whether this visitor must opt in before analytics loads.
+ * Any failure counts as "yes", so an outage shows the banner rather than
+ * loading GA without consent. Never throws.
+ */
+export async function fetchConsentRequired(fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  try {
+    const res = await fetchImpl(CONSENT_REGION_PATH, { cache: "no-store" });
+    if (!res.ok) return true;
+    const body: unknown = await res.json();
+    return !(typeof body === "object" && body !== null && (body as { consentRequired?: unknown }).consentRequired === false);
+  } catch {
+    return true;
+  }
 }
 
 const GTAG_SCRIPT_ID = "ga-gtag";

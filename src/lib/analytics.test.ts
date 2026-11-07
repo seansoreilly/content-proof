@@ -8,7 +8,9 @@ import {
   readConsent,
   readForceBanner,
   resolveGaTrackingId,
-  shouldShowConsentBanner,
+  decideAnalytics,
+  fetchConsentRequired,
+  needsRegionCheck,
   track,
   writeConsent,
   type ConsentStorage,
@@ -129,7 +131,7 @@ describe("consent storage helpers", () => {
   });
 });
 
-describe("shouldShowConsentBanner", () => {
+describe("decideAnalytics", () => {
   const base = {
     trackingId: DEFAULT_GA_TRACKING_ID,
     hostname: "www.contentproof.app",
@@ -137,17 +139,54 @@ describe("shouldShowConsentBanner", () => {
     forceBanner: false,
   } as const;
 
-  it("shows only on production hosts with no stored choice", () => {
-    expect(shouldShowConsentBanner(base)).toBe(true);
-    expect(shouldShowConsentBanner({ ...base, hostname: "localhost" })).toBe(false);
-    expect(shouldShowConsentBanner({ ...base, consent: "denied" })).toBe(false);
-    expect(shouldShowConsentBanner({ ...base, consent: "granted" })).toBe(false);
+  it("asks first only where the region requires opt-in", () => {
+    expect(decideAnalytics(base, true)).toBe("banner");
+    expect(decideAnalytics(base, false)).toBe("load");
+  });
+
+  it("lets a stored choice win over the region", () => {
+    expect(decideAnalytics({ ...base, consent: "granted" }, true)).toBe("load");
+    expect(decideAnalytics({ ...base, consent: "denied" }, false)).toBe("none");
+  });
+
+  it("never loads GA off production or when disabled", () => {
+    expect(decideAnalytics({ ...base, hostname: "localhost" }, false)).toBe("none");
+    expect(decideAnalytics({ ...base, hostname: "localhost" }, true)).toBe("none");
+    expect(decideAnalytics({ ...base, trackingId: null }, false)).toBe("none");
+    expect(decideAnalytics({ ...base, trackingId: null, consent: "granted" }, false)).toBe("none");
   });
 
   it("honours the force flag off production but never when GA is disabled", () => {
-    expect(shouldShowConsentBanner({ ...base, hostname: "localhost", forceBanner: true })).toBe(true);
-    expect(shouldShowConsentBanner({ ...base, trackingId: null })).toBe(false);
-    expect(shouldShowConsentBanner({ ...base, trackingId: null, forceBanner: true })).toBe(false);
+    expect(decideAnalytics({ ...base, hostname: "localhost", forceBanner: true }, false)).toBe("banner");
+    expect(decideAnalytics({ ...base, trackingId: null, forceBanner: true }, true)).toBe("none");
+  });
+
+  it("only needs the region lookup for an undecided production visitor", () => {
+    expect(needsRegionCheck(base)).toBe(true);
+    expect(needsRegionCheck({ ...base, consent: "denied" })).toBe(false);
+    expect(needsRegionCheck({ ...base, hostname: "localhost" })).toBe(false);
+    expect(needsRegionCheck({ ...base, forceBanner: true })).toBe(false);
+    expect(needsRegionCheck({ ...base, trackingId: null })).toBe(false);
+  });
+});
+
+describe("fetchConsentRequired", () => {
+  const respond = (status: number, body: unknown): typeof fetch =>
+    (async () => new Response(JSON.stringify(body), { status })) as typeof fetch;
+
+  it("reads the service's answer", async () => {
+    expect(await fetchConsentRequired(respond(200, { consentRequired: false }))).toBe(false);
+    expect(await fetchConsentRequired(respond(200, { consentRequired: true }))).toBe(true);
+  });
+
+  it("asks for consent whenever the answer is missing or the call fails", async () => {
+    expect(await fetchConsentRequired(respond(500, { consentRequired: false }))).toBe(true);
+    expect(await fetchConsentRequired(respond(200, { other: 1 }))).toBe(true);
+    expect(await fetchConsentRequired(respond(200, null))).toBe(true);
+    const failing = (async () => {
+      throw new Error("offline");
+    }) as typeof fetch;
+    expect(await fetchConsentRequired(failing)).toBe(true);
   });
 });
 
