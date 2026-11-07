@@ -363,4 +363,65 @@ the host. Keep `ED25519_PRIVATE_KEY` secret; the public key is published at
 `/.well-known/public-keys.json`. To rotate, set a new keypair and move the old
 public key into `ED25519_PUBLIC_KEYS_PREVIOUS`.
 
+## End-to-end tests on a preview
+
+Google sign-in cannot be scripted, so automated tests on a Vercel preview
+use a separate password login, `preview-test`. It signs in
+`<name>@preview.contentproof.test` accounts. It only exists when every
+safeguard below holds, and each is re-checked on every login
+(`src/lib/auth/preview-test-auth.ts`):
+
+- `VERCEL_ENV` is `preview`;
+- `PREVIEW_TEST_AUTH_SECRET` is set, at least 32 characters, and presented by
+  the caller;
+- `PREVIEW_TEST_AUTH_ISOLATED=yes` is set;
+- the preview's signing key is not a production key (not in
+  `src/lib/production-keys.json` and not in the live
+  `www.contentproof.app` key document, and if that cannot be fetched the
+  login is refused);
+- the request is not to a production hostname.
+
+Outside a preview, test addresses are never allowed and their sessions are
+dropped.
+
+### One-time setup in Vercel
+
+Set these in Project Settings → Environment Variables, scoped to **Preview
+only**:
+
+1. `ED25519_PRIVATE_KEY` and `ED25519_PUBLIC_KEY`: a new key pair just for
+   previews (the one-liner under "Getting started"). Test records then never
+   verify as production attestations.
+2. The Redis variables (`KV_REST_API_URL`/`KV_REST_API_TOKEN` or the
+   `UPSTASH_*` pair), pointing at a separate Upstash database. The
+   transparency log is permanent, so test records must never reach the
+   production one. The Upstash integration usually adds its variables to every
+   environment, so override them for Preview.
+3. `NEXTAUTH_SECRET`: a different value from production, so a preview session
+   cookie is meaningless to production.
+4. `PREVIEW_TEST_AUTH_SECRET`: a random value of 32+ characters
+   (`openssl rand -base64 32`).
+5. `PREVIEW_TEST_AUTH_ISOLATED=yes`: your confirmation of points 2 and 3, which
+   code cannot check.
+
+Then enable Deployment Protection → **Protection Bypass for Automation**, and
+redeploy the preview (environment variable changes need a new deployment).
+
+### Running the tests
+
+```bash
+export E2E_BASE_URL=https://<project>-git-<branch>-<team>.vercel.app
+export E2E_AUTH_PROVIDER=preview-test
+export E2E_AUTH_SECRET=<PREVIEW_TEST_AUTH_SECRET>
+export E2E_VERCEL_BYPASS=<protection bypass secret>
+npx vitest run src/e2e          # API flow: sign, verify, log proofs
+node scripts/e2e-browser.mjs    # browser flow: upload, verify, account, revoke
+```
+
+The browser script needs Playwright (`npm i --no-save playwright && npx
+playwright install chromium`). Set `E2E_SCREENSHOTS=<dir>` to keep a
+screenshot of each step. Both tests also run against a local dev server
+started with `DEBUG_AUTH=true` and `NEXT_PUBLIC_DEBUG_AUTH=true`, with only
+`E2E_BASE_URL` set.
+
 More detail is in [documentation](./documentation).
