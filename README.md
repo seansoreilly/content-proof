@@ -346,12 +346,44 @@ Optional:
 - `npm run lint`: ESLint
 - `npm run typecheck`: TypeScript check
 - `npm test`: unit tests
+- `npm run test:redis`: Redis integration tests against a real Redis (see
+  below)
 
 CI (`.github/workflows/ci.yml`) runs typecheck, lint, test and build.
 
 Regenerate `package-lock.json` with npm 10 (`npx npm@10 install
 --package-lock-only`), which is what CI and Vercel run. npm 12 omits optional
 platform packages from the lockfile and `npm ci` on npm 10 then refuses it.
+
+## Redis integration tests
+
+The unit tests use in-memory fakes for Redis. `npm run test:redis` runs
+`src/lib/redis.integration.test.ts` against a real Redis server through the real
+`@upstash/redis` client and the Upstash REST protocol, so the Lua scripts,
+cjson, MULTI/EXEC and nil handling are what production runs. They cover the
+log store (including 100 concurrent appends and the upgrade of a log written
+before leaf hashes were stored), signed heads and proofs, the rate limiter,
+the record store and the key registry.
+
+With no further setup the script starts a private `redis-server` (it must be
+on the `PATH`; no persistence) and `scripts/upstash-rest-shim.mjs`, a small
+stand-in for the Upstash REST API, runs the tests, and stops both. Ports
+default to 6390 for Redis and 8079 for the shim; override them with
+`REDIS_TEST_REDIS_PORT` and `REDIS_TEST_SHIM_PORT`.
+
+To run against something else that speaks the Upstash REST protocol, such as
+a throwaway Upstash database or the official emulator
+(`hiett/serverless-redis-http`), set its URL and token:
+
+```bash
+REDIS_TEST_URL=https://<db>.upstash.io REDIS_TEST_TOKEN=<token> npm run test:redis
+```
+
+The tests run `FLUSHDB` before each one, so use a dedicated database with
+nothing in it you want to keep, and keep all Redis integration tests in that
+one file (two files running in parallel would flush each other's data).
+Without `REDIS_TEST_URL` and `REDIS_TEST_TOKEN` they are skipped, so
+`npm test` and CI do not need Redis.
 
 ## Deployment
 
