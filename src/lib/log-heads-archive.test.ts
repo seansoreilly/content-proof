@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { verifyLogHead, type SignedLogHead } from "@/lib/log-verify";
 import type { PublicKeysJson } from "@/lib/keyset";
-import productionKeys from "@/test/fixtures/production-keys.json";
+import productionKeys from "@/lib/production-keys.json";
 
 /**
  * Every tree head archived in `log-heads/` was signed in production. Verifying

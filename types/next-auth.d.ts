@@ -15,6 +15,8 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
     allowed?: boolean;
+    /** Set for sessions from the preview-only test login. */
+    previewTest?: boolean;
   }
 }
 
